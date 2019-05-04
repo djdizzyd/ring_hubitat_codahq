@@ -24,15 +24,17 @@ import hubitat.helper.InterfaceUtils
 
 metadata {
   definition(name: "Ring API Virtual Device", namespace: "codahq-hubitat", author: "Ben Rimmasch",
-          description: "This device holds the websocket connection that controls the alarm hub and/or the lighting bridge") {
+    description: "This device holds the websocket connection that controls the alarm hub and/or the lighting bridge") {
     capability "Actuator"
     capability "Initialize"
     capability "Refresh"
 
     command "createDevices"
+    command "testCommand"
   }
 
   preferences {
+    input name: "pollingInterval", type: "number", range: 8..48, title: "Polling Interval", description: "Duration in hours between polls", defaultValue: 24, required: true
     input name: "descriptionTextEnable", type: "bool", title: "Enable descriptionText logging", defaultValue: true
     input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
     input name: "traceLogEnable", type: "bool", title: "Enable trace logging", defaultValue: true
@@ -53,6 +55,12 @@ def logTrace(msg) {
 
 def configure() {
   logDebug "configure()"
+}
+
+def testCommand() {
+  //simpleRequest("manager", [dst: "***REMOVED***"])
+  //simpleRequest("finddev", [dst: "***REMOVED***", adapterId: "zwave"])
+  simpleRequest("sirenon", [dst: "***REMOVED***"])
 }
 
 def parse(String description) {
@@ -100,14 +108,36 @@ def initialize() {
   state.seq = 0
 }
 
+def updated() {
+  refresh()
+}
+
 def refresh() {
   //def dst = "***REMOVED***"
+  unschedule()
+  state.updatedDate = now()
   state.hubs?.each { hub ->
     if (hub.kind == "base_station_v1") {
-      logTrace "refresh(${hub.zid})"
+      logInfo "Refreshing hub ${hub.zid}"
       simpleRequest("refresh", [dst: hub.zid])
     }
   }
+  customPolling()
+}
+
+def customPolling() {
+  logTrace "customPolling(${pollingInterval}) now:${now()} state.updatedDate:${state.updatedDate}"
+  if ((getChildDevices()?.size() ?: 0) == 0) {
+    logInfo "Polling canceled. No composite devices!"
+    return
+  }
+  double timesSinceContact = (now() - state.updatedDate).abs() / 1000  //time since last update in seconds
+  logDebug "Polling started.  Time since last refresh: ${(timesSinceContact / 60 / 60).round(1)} hours"
+  if ((timesSinceContact / 60 / 60) > (pollingInterval ?: 24)) {
+    logDebug "Polling interval exceeded"
+    refresh()
+  }
+  runIn(pollingInterval * 60 * 60, customPolling)  //time in seconds
 }
 
 /**
@@ -159,28 +189,53 @@ private getRequests(parts) {
   //logTrace "parts: ${parts} ${parts.dni}"
   state.seq = (state.seq ?: 0) + 1 //annoyingly the code editor doesn't like the ++ operator
   return [
-          "refresh" : ["message", [msg: "DeviceInfoDocGetList", dst: parts.dst, seq: state.seq]],
-          "set-mode": [
-                  "message", [
-                  msg     : "DeviceInfoSet",
-                  datatype: "DeviceInfoSetType",
-                  body    : [
-                          [
-                                  zid    : parts.zid,
-                                  command: [
-                                          v1: [
-                                                  [
-                                                          commandType: "security-panel.switch-mode",
-                                                          data       : ["mode": parts.mode]
-                                                  ]
-                                          ]
-                                  ]
-                          ]
-                  ],
-                  dst     : parts.dst,
-                  seq     : state.seq
-          ]
-          ]
+    "refresh": ["message", [msg: "DeviceInfoDocGetList", dst: parts.dst, seq: state.seq]],
+    "manager": ["message", [msg: "GetAdapterManagersList", dst: parts.dst, seq: state.seq]],//working but not used
+    "sysinfo": ["message", [msg: "GetSystemInformation", dst: parts.dst, seq: state.seq]],  //working but not used
+    "setmode": ["message", [
+      msg: "DeviceInfoSet",
+      datatype: "DeviceInfoSetType",
+      body: [[
+        zid: parts.zid,
+        command: [v1: [[
+          commandType: "security-panel.switch-mode",
+          data: ["mode": parts.mode]
+          ]]]
+        ]],
+      dst: parts.dst,
+      seq: state.seq
+      ]],
+    "sirenon": ["message", [  //super broken.  do not use
+      msg: "DeviceInfoSet",
+      datatype: "DeviceInfoSetType",
+      body: [[
+        zid: parts.zid,
+        command: [v1: [[
+          commandType: "security-panel.sound-siren"
+          ]]]
+        ]],
+      dst: parts.dst,
+      seq: state.seq
+      ]],
+    "finddev": ["message", [   //working but not used
+      msg: "FindDevice",
+      datatype: "FindDeviceType",
+      body: [[adapterManagerName: parts.adapterId]],
+      dst: parts.dst,
+      seq: state.seq
+      ]],
+    
+    //set volume base station 42["message",{"body":[{"zid":"***REMOVED***","device":{"v1":{"volume":0.89}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":4}]
+    //test siren base station 42["message",{"body":[{"zid":"***REMOVED***","command":{"v1":[{"commandType":"siren-test.start","data":{}}]}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":5}]
+    //set volume keypad       42["message",{"body":[{"zid":"***REMOVED***","device":{"v1":{"volume":0.64}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":6}]
+    //set power save keypad   42["message",{"body":[{"zid":"***REMOVED***","device":{"v1":{"powerSave":"extended"}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":7}]
+    //set power save off keyp 42["message",{"body":[{"zid":"***REMOVED***","device":{"v1":{"powerSave":"off"}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":8}]
+    //test mode motion detctr 42["message",{"body":[{"zid":"***REMOVED***","command":{"v1":[{"commandType":"detection-test-mode.start","data":{}}]}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":9}]
+    //cancel test above       42["message",{"body":[{"zid":"***REMOVED***","command":{"v1":[{"commandType":"detection-test-mode.cancel","data":{}}]}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":10}]
+    //motion sensitivy motdet 42["message",{"body":[{"zid":"***REMOVED***","device":{"v1":{"sensitivity":1}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":11}]
+    //more                    42["message",{"body":[{"zid":"***REMOVED***","device":{"v1":{"sensitivity":0}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":12}]
+    //0 high, 1 mid, 2 low    42["message",{"body":[{"zid":"***REMOVED***","device":{"v1":{"sensitivity":2}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":13}]
+    //for sniffing start xposed module for unpinning, restart phone.  connect app once on osprey.  change to mitmproxy on kestrel.  should work.  if doesn't, force close app and start again on osprey.  then while app is open switch to kestrel.
   ]
 }
 
@@ -301,6 +356,9 @@ private handleDeviceInfo(info, src) {
               || info.impulse?.v1[0]?.impulseType == "comm.wakeup"
               || info.impulse?.v1[0]?.impulseType == "error.comm.wakeup-missed") {
         handleHeartbeat(d, info)
+      }
+      else if (info.impulse?.v1[0]?.impulseType == "network-stats.update-delta") {
+        //i'll just hold onto this for later in case i use it to update routes or something	
       }
       else if (d.getDataValue("type") == "sensor.contact" && info.device?.v1) {
         d.setValues(["contact": info.device.v1.faulted ? "open" : "closed"])
