@@ -1,5 +1,5 @@
 /**
- *  Ring Generic Motion Sensor Driver
+ *  Ring Virtual Motion Sensor Driver
  *
  *  Copyright 2019 Ben Rimmasch
  *
@@ -21,7 +21,7 @@
 import groovy.json.JsonSlurper
 
 metadata {
-  definition(name: "Ring Generic Motion Sensor", namespace: "codahq-hubitat", author: "Ben Rimmasch") {
+  definition(name: "Ring Virtual Motion Sensor", namespace: "codahq-hubitat", author: "Ben Rimmasch") {
     capability "Refresh"
     capability "Sensor"
     capability "Motion Sensor"

@@ -289,10 +289,7 @@ private getRequests(parts) {
         zid: device.getDataValue("vault_zid"),
         command: [v1: [[
           commandType: "vault.add-user",
-          data: {
-            label:
-            parts.name
-          }
+          data: { label: parts.name }
         ]]]
       ]],
       dst: parts.dst,
@@ -305,10 +302,7 @@ private getRequests(parts) {
         zid: parts.acess_code_zid,
         command: [v1: [[
           commandType: "security-panel.enable-user",
-          data: {
-            label:
-            parts.name
-          }
+          data: { label: parts.name }
         ]]]
       ]],
       dst: parts.dst,
@@ -336,12 +330,13 @@ private getRequests(parts) {
         zid: device.getDataValue("vault_zid"),
         command: [v1: [[
           commandType: "vault.sync-code-to-device",
-          data: ["zid": parts.acess_code_zid, "key": parts.key_pos]
+          data: [ "zid": parts.acess_code_zid, "key": parts.key_pos ]
         ]]]
       ]],
       dst: parts.dst,
       seq: state.seq
     ]],
+
 
     //set volume base station 42["message",{"body":[{"zid":"***REMOVED***","device":{"v1":{"volume":0.89}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":4}]
     //test siren base station 42["message",{"body":[{"zid":"***REMOVED***","command":{"v1":[{"commandType":"siren-test.start","data":{}}]}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":5}]
@@ -447,7 +442,7 @@ private getMODES() {
   return [
     "none": "off",
     "some": "home",
-    "all": "away"
+    "all" : "away"
   ]
 }
 
@@ -657,12 +652,12 @@ private refreshSensors(sensors, create, src) {
         try {
           d = addChildDevice("codahq-hubitat", DEVICE_TYPES[sensor.general.v2.deviceType].name, getFormattedDNI(sensor.general.v2.zid), [
             //"label": sensor.general.v2.name,
-            "zid": sensor.general.v2.zid,
-            "fingerprint": sensor.general.v2.fingerprint ?: "N/A",
+            "zid"         : sensor.general.v2.zid,
+            "fingerprint" : sensor.general.v2.fingerprint ?: "N/A",
             "manufacturer": sensor.general.v2.manufacturerName ?: "Ring",
-            "serial": sensor.general.v2.serialNumber ?: "N/A",
-            "type": sensor.general.v2.deviceType,
-            "dst": src
+            "serial"      : sensor.general.v2.serialNumber ?: "N/A",
+            "type"        : sensor.general.v2.deviceType,
+            "dst"         : src
           ])
           d.label = sensor.general.v2.name
           log.warn "Succesfully added ${sensor.general.v2.deviceType} with dni: ${getFormattedDNI(sensor.general.v2.zid)}"
@@ -701,9 +696,9 @@ private getMESSAGE_PREFIX() {
 
 private getDEVICE_TYPES() {
   return [
-    "sensor.contact": [name: "Ring Generic Contact Sensor"],
-    "sensor.motion": [name: "Ring Generic Motion Sensor"],
-    "adapter.zwave": [name: "Ring Z-Wave Adapter"],
+    "sensor.contact": [name: "Ring Virtual Contact Sensor"],
+    "sensor.motion" : [name: "Ring Virtual Motion Sensor"],
+    "adapter.zwave" : [name: "Ring Z-Wave Adapter"],
     "security-panel": [name: "Ring Alarm Base Station"],
     "lock": [name: "Ring Virtual Lock"],
     "access-code.vault": [name: "Code Vault"],
