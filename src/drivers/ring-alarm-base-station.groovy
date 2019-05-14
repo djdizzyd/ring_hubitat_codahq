@@ -84,7 +84,7 @@ def setValues(params) {
     logInfo "Alarm mode for device ${device.label} is ${params.mode}"
     sendEvent(name: "mode", value: params.mode)
   }
-  if (syncRingToHsm && location.hsmStatus != RING_TO_HSM_MODE_MAP[params.mode]) {
+  if (params.mode && syncRingToHsm && location.hsmStatus != RING_TO_HSM_MODE_MAP[params.mode]) {
     logInfo "Setting HSM to ${RING_TO_HSM_MODE_MAP[params.mode]}"
     logTrace "mode: ${params.mode} hsmStatus: ${location.hsmStatus}"
     sendLocationEvent(name: "hsmSetArm", value: RING_TO_HSM_MODE_MAP[params.mode])

@@ -25,6 +25,7 @@ metadata {
     capability "Sensor"
     capability "Motion Sensor"
     capability "Audio Volume"
+    capability "Battery"
   }
 
   preferences {
@@ -129,6 +130,9 @@ def setValues(params) {
     unschedule()
     sendEvent([name: "motion", value: params.motion])
     runIn(motionTimeout.toInteger(), stopMotion)
+  }
+  if (params.battery) {
+    sendEvent(name: "battery", value: params.battery)
   }
   if (params.lastUpdate) {
     state.lastUpdate = params.lastUpdate
