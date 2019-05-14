@@ -22,14 +22,14 @@ import groovyx.net.http.ContentType
 import groovy.json.JsonOutput
 
 definition(
-        name: "Unofficial Ring Connect",
-        namespace: "codahq-hubitat",
-        author: "Ben Rimmasch (codahq)",
-        description: "Service Manager for Ring Floodlights, Spotlights and Chimes",
-        category: "Convenience",
-        iconUrl: "https://github.com/fake/url/what/is/this/for/ic_cast_grey_24dp.png",
-        iconX2Url: "https://github.com/fake/url/what/is/this/for/ic_cast_grey_24dp.png",
-        iconX3Url: "https://github.com/fake/url/what/is/this/for/ic_cast_grey_24dp.png"
+  name: "Unofficial Ring Connect",
+  namespace: "codahq-hubitat",
+  author: "Ben Rimmasch (codahq)",
+  description: "Service Manager for Ring Floodlights, Spotlights and Chimes",
+  category: "Convenience",
+  iconUrl: "https://github.com/fake/url/what/is/this/for/ic_cast_grey_24dp.png",
+  iconX2Url: "https://github.com/fake/url/what/is/this/for/ic_cast_grey_24dp.png",
+  iconX3Url: "https://github.com/fake/url/what/is/this/for/ic_cast_grey_24dp.png"
 )
 
 preferences {
@@ -74,6 +74,8 @@ def locations() {
 }
 
 def mainPage() {
+
+  getNotifications()
 
   def all = simpleRequest("locations")
 
@@ -131,15 +133,15 @@ def configurePDevice(params) {
     if (state.currentDeviceId == getFormattedDNI(RING_API_DNI)) {
       section {
         paragraph("This is the virtual device that holds the WebSockets connection for your Ring hubs/bridges. You don't need to "
-                + "know what this means but I wanted to tell you so I can justify why it had to exist and why you have to create "
-                + "it.  At the time of the creation of this app a WebSockets client could only be created in a device.  It is/was "
-                + "not available to apps.")
+          + "know what this means but I wanted to tell you so I can justify why it had to exist and why you have to create "
+          + "it.  At the time of the creation of this app a WebSockets client could only be created in a device.  It is/was "
+          + "not available to apps.")
         paragraph("To keep complexity low (for now) you must navigate to the API device and create all devices manually.  If there "
-                + "is a device that you don't want simply delete it.  If a device is not created that probably means the device "
-                + "driver for it was not installed or is not yet created for that device type. If Ring adds or I find an API call "
-                + "that can list hub devices (Z-Wave and Beams) with their ZIDs then I will add functionality to create and "
-                + "maintain those types of devices through the HE app.  For now, the only way I can get a list of these devices "
-                + "is through the web socket so it will only be done through the device.")
+          + "is a device that you don't want simply delete it.  If a device is not created that probably means the device "
+          + "driver for it was not installed or is not yet created for that device type. If Ring adds or I find an API call "
+          + "that can list hub devices (Z-Wave and Beams) with their ZIDs then I will add functionality to create and "
+          + "maintain those types of devices through the HE app.  For now, the only way I can get a list of these devices "
+          + "is through the web socket so it will only be done through the device.")
       }
     }
     section {
@@ -299,10 +301,10 @@ def addDevices() {
 
         try {
           def newDevice = addChildDevice("codahq-hubitat", DEVICE_TYPES[selectedDevice.kind].driver, getFormattedDNI(selectedDevice.id), selectedDevice?.hub, [
-                  "label": selectedDevice.id == RING_API_DNI ? DEVICE_TYPES[selectedDevice.kind].driver : (selectedDevice?.name ?: DEVICE_TYPES[selectedDevice.kind].name),
-                  "data" : [
-                          "device_id": selectedDevice.id
-                  ]
+            "label": selectedDevice.id == RING_API_DNI ? DEVICE_TYPES[selectedDevice.kind].driver : (selectedDevice?.name ?: DEVICE_TYPES[selectedDevice.kind].name),
+            "data": [
+              "device_id": selectedDevice.id
+            ]
           ])
           if (selectedDevice.id == RING_API_DNI) {
             //init the websocket connection and set seq to 0
@@ -359,18 +361,23 @@ def getDeviceIds() {
   }
 }
 
+def getNotifications() {
+  simpleRequest("subscribe")
+  app.properties.each { log.warn it }
+}
+
 private getRING_API_DNI() {
   return "WS_API_DNI"
 }
 
 private getDEVICE_TYPES() {
   return [
-          "hp_cam_v1"      : [name: "Ring Floodlight Cam", driver: "Ring Generic Light with Siren"],
-          "hp_cam_v2"      : [name: "Ring Spotlight Cam Wired", driver: "Ring Generic Light"],
-          "chime_pro"      : [name: "Ring Chime Pro", driver: "Ring Generic Chime"],
-          "chime"          : [name: "Ring Chime", driver: "Ring Generic Chime"],
-          "base_station_v1": [name: "Ring Alarm (API Device)", driver: "Ring API Virtual Device"],
-          "beams_bridge_v1": [name: "Ring Bridge (API Device)", driver: "Ring API Virtual Device"]
+    "hp_cam_v1": [name: "Ring Floodlight Cam", driver: "Generic Ring Light"],
+    "hp_cam_v2": [name: "Ring Spotlight Cam Wired", driver: "Generic Ring Light"],
+    "chime_pro": [name: "Ring Chime Pro", driver: "Generic Ring Chime"],
+    "chime": [name: "Ring Chime", driver: "Generic Ring Chime"],
+    "base_station_v1": [name: "Ring Alarm (API Device)", driver: "Ring API Virtual Device"],
+    "beams_bridge_v1": [name: "Ring Bridge (API Device)", driver: "Ring API Virtual Device"]
   ]
 }
 
@@ -406,21 +413,25 @@ private getRequests(parts) {
   //logTrace "getRequest(parts)"
   //logTrace "parts: ${parts} ${parts.dni}"
   return [
-          "refresh"       : [method: GET, params: [uri: "https://api.ring.com", path: "/clients_api/ring_devices", contentType: JSON]],
-          "devices"       : [method: GET, params: [uri: "https://api.ring.com", path: "/clients_api/ring_devices", contentType: JSON]],
-          "light-on"      : [method: PUT, params: [uri: "https://api.ring.com", path: "/clients_api/doorbots/${getRingDeviceId(parts.dni)}/floodlight_light_on", contentType: TEXT]],
-          "light-off"     : [method: PUT, params: [uri: "https://api.ring.com", path: "/clients_api/doorbots/${getRingDeviceId(parts.dni)}/floodlight_light_off", contentType: TEXT]],
-          "siren-on"      : [method: PUT, params: [uri: "https://api.ring.com", path: "/clients_api/doorbots/${getRingDeviceId(parts.dni)}/siren_on", contentType: JSON]],
-          "siren-off"     : [method: PUT, params: [uri: "https://api.ring.com", path: "/clients_api/doorbots/${getRingDeviceId(parts.dni)}/siren_off", contentType: TEXT]],
-          "chime-motion"  : [method: POST, params: [uri: "https://api.ring.com", path: "/clients_api/chimes/${getRingDeviceId(parts.dni)}/play_sound", contentType: TEXT, requestContentType: JSON, body: [kind: "motion"]]],
-          "chime-ding"    : [method: POST, params: [uri: "https://api.ring.com", path: "/clients_api/chimes/${getRingDeviceId(parts.dni)}/play_sound", contentType: TEXT, requestContentType: JSON, body: [kind: "ding"]]],
-          "chime-volume"  : [method: PUT, params: [uri: "https://api.ring.com", path: "/clients_api/chimes/${getRingDeviceId(parts.dni)}", contentType: TEXT, requestContentType: JSON, body: [chime: [settings: [volume: parts.volume]]]]],
-          "chime-mute"    : [method: PUT, params: [uri: "https://api.ring.com", path: "/clients_api/chimes/${getRingDeviceId(parts.dni)}", contentType: TEXT, requestContentType: JSON, body: [chime: [settings: [volume: 0]]]]],
-          "chime-unmute"  : [method: PUT, params: [uri: "https://api.ring.com", path: "/clients_api/chimes/${getRingDeviceId(parts.dni)}", contentType: TEXT, requestContentType: JSON, body: [chime: [settings: [volume: parts.volume]]]]],
-          "refresh-device": [method: GET, params: [uri: "https://api.ring.com", path: "/clients_api/ring_devices/${getRingDeviceId(parts.dni)}", contentType: JSON]],
-          "locations"     : [method: GET, type: "bearer", params: [uri: "https://app.ring.com", path: "/rhq/v1/devices/v1/locations", contentType: JSON/*"${JSON}, ${TEXT}, ${ALL}"*/]],
-          "ws-connect"    : [method: POST, type: "bearer", params: [uri: "https://app.ring.com", path: "/api/v1/rs/connections?accountId=${selectedLocations}"], headers: ['Content-Type': "application/x-www-form-urlencoded"]],
-          "tickets"       : [method: GET, type: "bearer", params: [uri: "https://app.ring.com", path: "/api/v1/clap/tickets?locationID=${selectedLocations}", contentType: JSON, requestContentType: TEXT]]
+    "refresh": [method: GET, params: [uri: "https://api.ring.com", path: "/clients_api/ring_devices", contentType: JSON]],
+    "devices": [method: GET, params: [uri: "https://api.ring.com", path: "/clients_api/ring_devices", contentType: JSON]],
+    "light-on": [method: PUT, params: [uri: "https://api.ring.com", path: "/clients_api/doorbots/${getRingDeviceId(parts.dni)}/floodlight_light_on", contentType: TEXT]],
+    "light-off": [method: PUT, params: [uri: "https://api.ring.com", path: "/clients_api/doorbots/${getRingDeviceId(parts.dni)}/floodlight_light_off", contentType: TEXT]],
+    "siren-on": [method: PUT, params: [uri: "https://api.ring.com", path: "/clients_api/doorbots/${getRingDeviceId(parts.dni)}/siren_on", contentType: JSON]],
+    "siren-off": [method: PUT, params: [uri: "https://api.ring.com", path: "/clients_api/doorbots/${getRingDeviceId(parts.dni)}/siren_off", contentType: TEXT]],
+    "chime-motion": [method: POST, params: [uri: "https://api.ring.com", path: "/clients_api/chimes/${getRingDeviceId(parts.dni)}/play_sound", contentType: TEXT, requestContentType: JSON, body: [kind: "motion"]]],
+    "chime-ding": [method: POST, params: [uri: "https://api.ring.com", path: "/clients_api/chimes/${getRingDeviceId(parts.dni)}/play_sound", contentType: TEXT, requestContentType: JSON, body: [kind: "ding"]]],
+    "chime-volume": [method: PUT, params: [uri: "https://api.ring.com", path: "/clients_api/chimes/${getRingDeviceId(parts.dni)}", contentType: TEXT, requestContentType: JSON, body: [chime: [settings: [volume: parts.volume]]]]],
+    "chime-mute": [method: PUT, params: [uri: "https://api.ring.com", path: "/clients_api/chimes/${getRingDeviceId(parts.dni)}", contentType: TEXT, requestContentType: JSON, body: [chime: [settings: [volume: 0]]]]],
+    "chime-unmute": [method: PUT, params: [uri: "https://api.ring.com", path: "/clients_api/chimes/${getRingDeviceId(parts.dni)}", contentType: TEXT, requestContentType: JSON, body: [chime: [settings: [volume: parts.volume]]]]],
+    "refresh-device": [method: GET, params: [uri: "https://api.ring.com", path: "/clients_api/ring_devices/${getRingDeviceId(parts.dni)}", contentType: JSON]],
+    "locations": [method: GET, type: "bearer", params: [uri: "https://app.ring.com", path: "/rhq/v1/devices/v1/locations", contentType: JSON/*"${JSON}, ${TEXT}, ${ALL}"*/]],
+    "ws-connect": [method: POST, type: "bearer", params: [uri: "https://app.ring.com", path: "/api/v1/rs/connections?accountId=${selectedLocations}"], headers: ['Content-Type': "application/x-www-form-urlencoded"]],
+    "tickets": [method: GET, type: "bearer", params: [uri: "https://app.ring.com", path: "/api/v1/clap/tickets?locationID=${selectedLocations}", contentType: JSON, requestContentType: TEXT]],
+    "subscribe": [method: PUT, type: "bearer", params: [uri: "https://api.ring.com", path: "/clients_api/device", requestContentType: JSON, body: [device: ["push_notification_token": "https://cloud.hubitat.com/api/${location.hubs[0].id}/apps/${app.id}/devices/all?access_token=[maker access token]"]]]],
+    "master-key": [method: GET, type: "bearer", params: [uri: "https://app.ring.com", path: "/api/v1/rs/masterkey?locationId=${selectedLocations}", contentType: JSON]]
+
+    //https://cloud.hubitat.com/api/[HUBUID]/apps/937/devices/all?access_token= 10[maker access token]
   ]
 }
 
@@ -451,50 +462,55 @@ def simpleRequest(type, params = [:]) {
     request.params << [headers: ['User-Agent': "Dalvik/2.1.0 (Linux; U; Android 6.0.1; Nexus 7 Build/MOB30X)"]]
   }
 
+  if (type == "subscribe") return
+
   try {
 
-    "${request.method}"(request.params) {
-      resp ->
-        logTrace "Success handler"
+    "${request.method}"(request.params) { resp ->
+      logTrace "Success handler"
 
-        def body = resp.data
-        if (type == "refresh") {
-          logTrace "refeshing from ${body.stickup_cams.size()} cams"
+      def body = resp.data
+      if (type == "refresh") {
+        logTrace "refeshing from ${body.stickup_cams.size()} cams"
 
-          body.stickup_cams.each {
-            def device = getChildDevice(getFormattedDNI(it.id.toString()))
-            if (device) {
-              device.childParse(type, [msg: it])
-            }
+        body.stickup_cams.each {
+          def device = getChildDevice(getFormattedDNI(it.id.toString()))
+          if (device) {
+            device.childParse(type, [msg: it])
           }
         }
-        else if (type == "light-on" || type == "light-off" || type == "siren-off") {
-          logTrace "resp ${resp}"
-          getChildDevice(params.dni).childParse(type, [response: resp.getStatus()])
-        }
-        else if (type == "devices") {
-          //logTrace "resp ${JsonOutput.toJson(body)}"
+      }
+      else if (type == "light-on" || type == "light-off" || type == "siren-off") {
+        logTrace "resp ${resp}"
+        getChildDevice(params.dni).childParse(type, [response: resp.getStatus()])
+      }
+      else if (type == "devices") {
+        //logTrace "resp ${JsonOutput.toJson(body)}"
 
-          body.chimes.each { body.stickup_cams << it }
-          body.base_stations.each { body.stickup_cams << it }
-          body.beams_bridges.each { body.stickup_cams << it }
-          return body.stickup_cams
-        }
-        else if (type == "chime-motion" || type == "chime-ding" || type == "chime-volume" || type == "chime-mute" || type == "chime-unmute") {
-          logTrace "resp ${resp}"
-          getChildDevice(params.dni).childParse(type, [response: resp.getStatus(), volume: params.volume])
-        }
-        else if (type == "refresh-device" || type == "siren-on") {
-          logTrace "body ${body}"
-          getChildDevice(params.dni).childParse(type, [response: resp.getStatus(), msg: body])
-        }
-        else if (type == "locations") {
-          return body.user_locations
-        }
-        else if (type == "ws-connect" || type == "tickets") {
-          //initWebsocket(body, getChildDevice(params.dni))
-          getChildDevice(params.dni).childParse(type, [response: resp.getStatus(), msg: body])
-        }
+        body.chimes.each { body.stickup_cams << it }
+        body.base_stations.each { body.stickup_cams << it }
+        body.beams_bridges.each { body.stickup_cams << it }
+        return body.stickup_cams
+      }
+      else if (type == "chime-motion" || type == "chime-ding" || type == "chime-volume" || type == "chime-mute" || type == "chime-unmute") {
+        logTrace "resp ${resp}"
+        getChildDevice(params.dni).childParse(type, [response: resp.getStatus(), volume: params.volume])
+      }
+      else if (type == "refresh-device" || type == "siren-on") {
+        logTrace "body ${body}"
+        getChildDevice(params.dni).childParse(type, [response: resp.getStatus(), msg: body])
+      }
+      else if (type == "locations") {
+        return body.user_locations
+      }
+      else if (type == "ws-connect" || type == "tickets") {
+        //initWebsocket(body, getChildDevice(params.dni))
+        getChildDevice(params.dni).childParse(type, [response: resp.getStatus(), msg: body])
+      }
+      else if (type == "master-key") {
+        getChildDevice(params.dni).childParse(type, [response: resp.getStatus(), msg: body, code: params.code, name: params.name])
+      }
+
     }
   }
   catch (Exception ex) {
@@ -585,13 +601,13 @@ def getTokens() {
   if (state.access_token == "EMPTY") {
 
     def params = [
-            uri               : "https://oauth.ring.com",
-            path              : "/oauth/token",
-            headers           : [
-                    "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 6.0.1; Nexus 7 Build/MOB30X)"
-            ],
-            requestContentType: "application/json",
-            body              : "{\"client_id\": \"ring_official_android\",\"grant_type\": \"password\",\"password\": \"${password}\",\"scope\": \"client\",\"username\": \"${username}\"}"
+      uri: "https://oauth.ring.com",
+      path: "/oauth/token",
+      headers: [
+        "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 6.0.1; Nexus 7 Build/MOB30X)"
+      ],
+      requestContentType: "application/json",
+      body: "{\"client_id\": \"ring_official_android\",\"grant_type\": \"password\",\"password\": \"${password}\",\"scope\": \"client\",\"username\": \"${username}\"}"
     ]
     try {
       httpPost(params) {
@@ -617,14 +633,14 @@ def getTokens() {
   if (state.authentication_token == "EMPTY") {
 
     params = [
-            uri               : "https://api.ring.com",
-            path              : "/clients_api/session",
-            headers           : [
-                    Authorization: "Bearer ${state.access_token}",
-                    "User-Agent" : "Dalvik/2.1.0 (Linux; U; Android 6.0.1; Nexus 7 Build/MOB30X)"
-            ],
-            requestContentType: "application/x-www-form-urlencoded",
-            body              : "device%5Bos%5D=android&device%5Bhardware_id%5D=${state.appDeviceId}&api_version=9"
+      uri: "https://api.ring.com",
+      path: "/clients_api/session",
+      headers: [
+        Authorization: "Bearer ${state.access_token}",
+        "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 6.0.1; Nexus 7 Build/MOB30X)"
+      ],
+      requestContentType: "application/x-www-form-urlencoded",
+      body: "device%5Bos%5D=android&device%5Bhardware_id%5D=${state.appDeviceId}&api_version=9"
     ]
 
     try {
@@ -676,8 +692,8 @@ def generateAppDeviceId() {
   //Let's generate an ID so that Ring doesn't think these are all coming from the same device
   def r = new Random()
   def result = (0..<32).collect { r.nextInt(16) }
-          .collect { Integer.toString(it, 16).toUpperCase() }
-          .join()
+    .collect { Integer.toString(it, 16).toUpperCase() }
+    .join()
   logDebug "Device ID generated: ${result}"
   state.appDeviceId = result
 }
