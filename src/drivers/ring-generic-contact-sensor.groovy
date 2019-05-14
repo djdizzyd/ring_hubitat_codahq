@@ -82,7 +82,7 @@ def setValues(params) {
     device.updateDataValue("hardwareVersion", params.hardwareVersion)
   }
 }
-
+/*
 def childParse(type, params = []) {
   logDebug "childParse(type, params)"
   logTrace "type ${type}"
@@ -154,4 +154,4 @@ private handleRefresh(json) {
     logInfo "No previous volume found so arbitrary value given"
   }
 }
-
+*/
