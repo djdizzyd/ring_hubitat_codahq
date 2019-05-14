@@ -30,6 +30,8 @@ metadata {
   }
 
   preferences {
+    input name: "syncRingToHsm", type: "bool", title: "Sync Ring Alarm mode to HSM mode?", defaultValue: false
+    input name: "cancelAlertsOnDisarm", type: "bool", title: "Cancel HSM Alerts on Ring Alarm Disarm?", defaultValue: true
     input name: "descriptionTextEnable", type: "bool", title: "Enable descriptionText logging", defaultValue: false
     input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: false
     input name: "traceLogEnable", type: "bool", title: "Enable trace logging", defaultValue: false
@@ -51,13 +53,13 @@ def logTrace(msg) {
 def setMode(mode) {
   logDebug "setMode(${mode})"
   if (mode == "Disarmed" && device.currentValue("mode") != "off") {
-    parent.simpleRequest("set-mode", [mode: "none", zid: device.getDataValue("zid"), dst: device.getDataValue("dst")])
+    parent.simpleRequest("setmode", [mode: "none", zid: device.getDataValue("zid"), dst: device.getDataValue("dst")])
   }
   else if (mode == "Home" && device.currentValue("mode") != "home") {
-    parent.simpleRequest("set-mode", [mode: "some", zid: device.getDataValue("zid"), dst: device.getDataValue("dst")])
+    parent.simpleRequest("setmode", [mode: "some", zid: device.getDataValue("zid"), dst: device.getDataValue("dst")])
   }
   else if (mode == "Away" && device.currentValue("mode") != "away") {
-    parent.simpleRequest("set-mode", [mode: "all", zid: device.getDataValue("zid"), dst: device.getDataValue("dst")])
+    parent.simpleRequest("setmode", [mode: "all", zid: device.getDataValue("zid"), dst: device.getDataValue("dst")])
   }
   else {
     logInfo "${device.label} already set to ${mode}.  No change necessary"
@@ -69,10 +71,26 @@ def refresh() {
   parent.simpleRequest("refresh", [dst: device.deviceNetworkId])
 }
 
+private getRING_TO_HSM_MODE_MAP() {
+  return [
+    "home": "armHome",
+    "away": "armAway",
+    "off": "disarm"
+  ]
+}
+
 def setValues(params) {
   if (params.mode && device.currentValue("mode") != params.mode) {
     logInfo "Alarm mode for device ${device.label} is ${params.mode}"
     sendEvent(name: "mode", value: params.mode)
+  }
+  if (syncRingToHsm && location.hsmStatus != RING_TO_HSM_MODE_MAP[params.mode]) {
+    logInfo "Setting HSM to ${RING_TO_HSM_MODE_MAP[params.mode]}"
+    logTrace "mode: ${params.mode} hsmStatus: ${location.hsmStatus}"
+    sendLocationEvent(name: "hsmSetArm", value: RING_TO_HSM_MODE_MAP[params.mode])
+  }
+  if (cancelAlertsOnDisarm && params.mode == "off") {
+    sendLocationEvent(name: "hsmSetArm", value: "cancelAlerts")
   }
   if (params.lastUpdate) {
     state.lastUpdate = params.lastUpdate
