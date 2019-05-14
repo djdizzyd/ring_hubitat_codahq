@@ -60,7 +60,8 @@ def configure() {
 def testCommand() {
   //simpleRequest("manager", [dst: "***REMOVED***"])
   //simpleRequest("finddev", [dst: "***REMOVED***", adapterId: "zwave"])
-  simpleRequest("sirenon", [dst: "***REMOVED***"])
+  //simpleRequest("sirenon", [dst: "***REMOVED***"])
+  parent.simpleRequest("master-key", [dni: device.deviceNetworkId, code: "5555", name: "Guest"])
 }
 
 def parse(String description) {
@@ -91,6 +92,15 @@ def parse(String description) {
       }
       else {
         log.warn "I think a DeviceInfoSet failed?"
+        log.warn description
+      }
+    }
+    else if (json[0].equals("message") && json[1].msg == "SetKeychainValue") {
+      if (json[1].status == 0) {
+        logTrace "SetKeychainValue with seq ${json[1].seq} succeeded."
+      }
+      else {
+        log.warn "I think a SetKeychainValue failed?"
         log.warn description
       }
     }
@@ -158,6 +168,12 @@ def childParse(type, params = []) {
     initWebsocket(params.msg)
     //42["message",{"msg":"RoomGetList","dst":"***REMOVED***","seq":1}]
   }
+  else if (type == "master-key") {
+    logTrace "master-key ${params.msg}"
+    simpleRequest("setcode", [code: params.code, dst: "***REMOVED***" /*params.dst*/, master_key: params.msg.masterkey])
+    simpleRequest("adduser", [code: params.name, dst: "***REMOVED***" /*params.dst*/])
+    simpleRequest("enableuser", [code: params.name, dst: "***REMOVED***" /*params.dst*/, acess_code_zid: "***REMOVED***"])
+  }
   else {
     log.error "Unhandled type ${type}"
   }
@@ -171,7 +187,7 @@ def simpleRequest(type, params = [:]) {
   def request = JsonOutput.toJson(getRequests(params).getAt(type))
   logTrace "request: ${request}"
 
-  if (request == null) {
+  if (request == null || type == "setcode" || type == "adduser" || type == "enableuser") {
     return
   }
 
@@ -200,11 +216,11 @@ private getRequests(parts) {
         command: [v1: [[
           commandType: "security-panel.switch-mode",
           data: ["mode": parts.mode]
-          ]]]
-        ]],
+        ]]]
+      ]],
       dst: parts.dst,
       seq: state.seq
-      ]],
+    ]],
     "sirenon": ["message", [  //super broken.  do not use
       msg: "DeviceInfoSet",
       datatype: "DeviceInfoSetType",
@@ -212,19 +228,121 @@ private getRequests(parts) {
         zid: parts.zid,
         command: [v1: [[
           commandType: "security-panel.sound-siren"
-          ]]]
-        ]],
+        ]]]
+      ]],
       dst: parts.dst,
       seq: state.seq
-      ]],
+    ]],
     "finddev": ["message", [   //working but not used
       msg: "FindDevice",
       datatype: "FindDeviceType",
       body: [[adapterManagerName: parts.adapterId]],
       dst: parts.dst,
       seq: state.seq
+    ]],
+    "setlock": ["message", [
+      msg: "DeviceInfoSet",
+      datatype: "DeviceInfoSetType",
+      body: [[
+        zid: parts.zid,
+        command: [v1: [[
+          commandType: "lock.${parts.mode}",
+          data: {}
+        ]]]
       ]],
-    
+      dst: parts.dst,
+      seq: state.seq
+    ]],
+    "set-volume-keypad": ["message", [
+      body: [[
+        zid: parts.dst,
+        device: ["v1": ["volume": parts.volume.toDouble() / 100]]
+      ]],
+      datatype: "DeviceInfoSetType",
+      dst: null,
+      msg: "DeviceInfoSet",
+      seq: state.seq
+    ]],
+    "setcode": ["message", [
+      msg: "SetKeychainValue",
+      datatype: "KeychainSetValueType",
+      body: [[
+        zid: device.getDataValue("vault_zid"),
+        items: [
+          [
+            key: "master_key",
+            value: parts.master_key
+          ],
+          [
+            key: "access_code",
+            value: parts.code
+          ]
+        ]
+      ]],
+      dst: parts.dst,
+      seq: state.seq
+    ]],
+    "adduser": ["message", [
+      msg: "DeviceInfoSet",
+      datatype: "DeviceInfoSetType",
+      body: [[
+        zid: device.getDataValue("vault_zid"),
+        command: [v1: [[
+          commandType: "vault.add-user",
+          data: {
+            label:
+            parts.name
+          }
+        ]]]
+      ]],
+      dst: parts.dst,
+      seq: state.seq
+    ]],
+    "enableuser": ["message", [
+      msg: "DeviceInfoSet",
+      datatype: "DeviceInfoSetType",
+      body: [[
+        zid: parts.acess_code_zid,
+        command: [v1: [[
+          commandType: "security-panel.enable-user",
+          data: {
+            label:
+            parts.name
+          }
+        ]]]
+      ]],
+      dst: parts.dst,
+      seq: state.seq
+    ]],
+    "confirm": ["message", [   //not complete
+      msg: "SetKeychainValue",
+      datatype: "KeychainSetValueType",
+      body: [[
+        zid: device.getDataValue("vault_zid"),
+        items: [
+          [
+            key: "master_key",
+            value: parts.master_key
+          ]
+        ]
+      ]],
+      dst: parts.dst,
+      seq: state.seq
+    ]],
+    "sync-code-to-device": ["message", [
+      msg: "DeviceInfoSet",
+      datatype: "DeviceInfoSetType",
+      body: [[
+        zid: device.getDataValue("vault_zid"),
+        command: [v1: [[
+          commandType: "vault.sync-code-to-device",
+          data: ["zid": parts.acess_code_zid, "key": parts.key_pos]
+        ]]]
+      ]],
+      dst: parts.dst,
+      seq: state.seq
+    ]],
+
     //set volume base station 42["message",{"body":[{"zid":"***REMOVED***","device":{"v1":{"volume":0.89}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":4}]
     //test siren base station 42["message",{"body":[{"zid":"***REMOVED***","command":{"v1":[{"commandType":"siren-test.start","data":{}}]}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":5}]
     //set volume keypad       42["message",{"body":[{"zid":"***REMOVED***","device":{"v1":{"volume":0.64}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":6}]
@@ -327,9 +445,9 @@ private handleUpdate(update) {
 
 private getMODES() {
   return [
-          "none": "off",
-          "some": "home",
-          "all" : "away"
+    "none": "off",
+    "some": "home",
+    "all": "away"
   ]
 }
 
@@ -351,20 +469,31 @@ private handleDeviceInfo(info, src) {
       }
       else if (!info.impulse && !info.device) {
         logTrace "lonely update?  should I just handle these as heartbeats even though they don't have an impulse or device?"
+        //logTrace "info: ${JsonOutput.prettyPrint(JsonOutput.toJson(info))}"
+        logDebug "device ${info.context.v1.deviceName} with zid ${info.general.v2.zid} category ${info.context.v1.categoryId} subcategory ${info.context.v1.subCategoryId}"
+        if (info.context.v1.categoryId == 33 && info.context.v1.subCategoryId == 0) {
+          d.setValues(["motion": "active"])
+        }
       }
-      else if (info.impulse?.v1[0]?.impulseType == "comm.heartbeat"
-              || info.impulse?.v1[0]?.impulseType == "comm.wakeup"
-              || info.impulse?.v1[0]?.impulseType == "error.comm.wakeup-missed") {
+      else if (info.impulse &&
+        (info.impulse?.v1[0]?.impulseType == "comm.heartbeat"
+          || info.impulse?.v1[0]?.impulseType == "comm.wakeup"
+          || info.impulse?.v1[0]?.impulseType == "error.comm.wakeup-missed")) {
         handleHeartbeat(d, info)
       }
-      else if (info.impulse?.v1[0]?.impulseType == "network-stats.update-delta") {
-        //i'll just hold onto this for later in case i use it to update routes or something	
+      else if (info.impulse && info.impulse?.v1[0]?.impulseType == "network-stats.update-delta") {
+        //i'll just hold onto this for later in case i use it to update routes or something
       }
       else if (d.getDataValue("type") == "sensor.contact" && info.device?.v1) {
         d.setValues(["contact": info.device.v1.faulted ? "open" : "closed"])
       }
       else if (d.getDataValue("type") == "sensor.motion" && info.device?.v1) {
         d.setValues(["motion": info.device.v1.faulted ? "active" : "inactive"])
+      }
+      else if (d.getDataValue("type") == "security-keypad" && info.device?.v1) {
+        if (info.device.v1.volume != null) {
+          d.setValues(["volume": info.device.v1.volume.toDouble() * 100])
+        }
       }
       else if (d.getDataValue("type") == "security-panel" && info.device?.v1) {
         if (info.device.v1.transitionDelayEndTimestamp && info.general?.v2?.lastUpdate) {
@@ -373,11 +502,19 @@ private handleDeviceInfo(info, src) {
         }
         d.setValues(["mode": MODES["${info.device.v1.mode}"]])
       }
+      else if (d.getDataValue("type") == "lock" && info.device?.v1) {
+        d.setValues(["lock": info.device.v1.locked])
+      }
       else {
         d.properties.each { log.warn it }
         log.warn "info not handled for device ${d} with type ${d.getDataValue("type")}"
         log.warn JsonOutput.prettyPrint(JsonOutput.toJson(info))
       }
+    }
+    else if (info.impulse?.v1?.getAt(0)?.impulseType == "vault.user-added") {
+      logDebug "User added"
+      logTrace "User added context: ${info.context.v1}"
+      state.codes = info.context.v1.device.v1.codes
     }
     else if (info.general.v2.adapterType == "ringnet") {
       logDebug "${info.general.v2.adapterType} update from device ${info.context.v1.deviceName} with zid ${info.general.v2.zid}"
@@ -497,19 +634,35 @@ private refreshSensors(sensors, create, src) {
       }
     }
 
+    //devices that don't have drivers that store in the API device
+    if (sensor.general.v2.deviceType == "access-code.vault") {
+      device.updateDataValue("vault_zid", sensor.general.v2.zid)
+    }
+    else if (sensor.general.v2.deviceType == "access-code") {
+      def codes = state.codes ?: [:]
+      if (!codes."${sensor.general.v2.zid}") {
+        codes << ["${sensor.general.v2.zid}": [name: sensor.general.v2.name, adapterZid: sensor.general.v2.adapterZid]]
+      }
+      else {
+        codes[sensor.general.v2.zid] = [name: sensor.general.v2.name, adapterZid: sensor.general.v2.adapterZid]
+      }
+      logTrace "codes: ${codes}"
+      state.codes = codes
+    }
+
     if (create) {
       if (!d) {
+        //devices that have drivers that store in devices
         log.warn "Creating a ${sensor.general.v2.name} (${sensor.general.v2.deviceType}) with dni: ${getFormattedDNI(sensor.general.v2.zid)}"
-
         try {
           d = addChildDevice("codahq-hubitat", DEVICE_TYPES[sensor.general.v2.deviceType].name, getFormattedDNI(sensor.general.v2.zid), [
-                  //"label": sensor.general.v2.name,
-                  "zid"         : sensor.general.v2.zid,
-                  "fingerprint" : sensor.general.v2.fingerprint ?: "N/A",
-                  "manufacturer": sensor.general.v2.manufacturerName ?: "Ring",
-                  "serial"      : sensor.general.v2.serialNumber ?: "N/A",
-                  "type"        : sensor.general.v2.deviceType,
-                  "dst"         : src
+            //"label": sensor.general.v2.name,
+            "zid": sensor.general.v2.zid,
+            "fingerprint": sensor.general.v2.fingerprint ?: "N/A",
+            "manufacturer": sensor.general.v2.manufacturerName ?: "Ring",
+            "serial": sensor.general.v2.serialNumber ?: "N/A",
+            "type": sensor.general.v2.deviceType,
+            "dst": src
           ])
           d.label = sensor.general.v2.name
           log.warn "Succesfully added ${sensor.general.v2.deviceType} with dni: ${getFormattedDNI(sensor.general.v2.zid)}"
@@ -523,7 +676,7 @@ private refreshSensors(sensors, create, src) {
       }
     }
     if (d) {
-      logTrace "state sensor info for ${sensor.general.v2.name} ::: faulted: ${sensor.device.v1.faulted}, batteryLevel: ${sensor.general.v2.batteryLevel}"
+      logTrace "state for ${sensor.general.v2.name} ::: faulted: ${sensor.device.v1.faulted}, locked: ${sensor.device.v1.locked}, batteryLevel: ${sensor.general.v2.batteryLevel}"
       if (sensor.general.v2.deviceType == "sensor.contact") {
         d.setValues(["contact": sensor.device.v1.faulted ? "open" : "closed"])
       }
@@ -548,10 +701,14 @@ private getMESSAGE_PREFIX() {
 
 private getDEVICE_TYPES() {
   return [
-          "sensor.contact": [name: "Ring Generic Contact Sensor"],
-          "sensor.motion" : [name: "Ring Generic Motion Sensor"],
-          "adapter.zwave" : [name: "Ring Z-Wave Adapter"],
-          "security-panel": [name: "Ring Alarm Base Station"]
+    "sensor.contact": [name: "Ring Generic Contact Sensor"],
+    "sensor.motion": [name: "Ring Generic Motion Sensor"],
+    "adapter.zwave": [name: "Ring Z-Wave Adapter"],
+    "security-panel": [name: "Ring Alarm Base Station"],
+    "lock": [name: "Ring Virtual Lock"],
+    "access-code.vault": [name: "Code Vault"],
+    "access-code": [name: "Access Code"],
+    "security-keypad": [name: "Ring Virtual Keypad"]
   ]
 }
 
