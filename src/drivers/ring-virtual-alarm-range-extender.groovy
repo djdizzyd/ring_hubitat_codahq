@@ -59,8 +59,7 @@ def setValues(deviceInfo) {
   logTrace "deviceInfo: ${deviceInfo}"
 
   if (deviceInfo.acStatus && deviceInfo.acStatus != null) {
-    def acStatus = deviceInfo.acStatus == "error" ? "unplugged" : "charging"
-    checkChanged("acStatus", acStatus)
+    checkChanged("acStatus", deviceInfo.acStatus)
   }
   //"batteryStatus": "full",
   //impulseType == battery.changed-out-of-band
