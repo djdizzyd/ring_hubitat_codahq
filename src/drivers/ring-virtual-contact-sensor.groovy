@@ -26,6 +26,7 @@ metadata {
     capability "Sensor"
     capability "Contact Sensor"
     capability "Battery"
+    capability "TamperAlert"
   }
 
   preferences {
@@ -52,106 +53,122 @@ def refresh() {
   //parent.simpleRequest("refresh-device", [dni: device.deviceNetworkId])
 }
 
-def setValues(params) {
-  if (params.contact && device.currentValue("contact") != params.contact) {
-    logInfo "Contact for device ${device.label} is ${params.contact}"
-    sendEvent(name: "contact", value: params.contact)
+def setValues(deviceInfo) {
+  logDebug "updateDevice(deviceInfo)"
+  logTrace "deviceInfo: ${deviceInfo}"
+
+  if (deviceInfo.state && deviceInfo.state.faulted != null) {
+    def contact = deviceInfo.state.faulted ? "open" : "closed"
+    checkChanged("contact", contact)
   }
-  if (params.battery) {
-    sendEvent(name: "battery", value: params.battery)
+  if (deviceInfo.batteryLevel) {
+    checkChanged("battery", deviceInfo.batteryLevel)
   }
-  if (params.lastUpdate) {
-    state.lastUpdate = params.lastUpdate
+  if (deviceInfo.tamperStatus) {
+    def tamper = deviceInfo.tamperStatus == "tamper" ? "detected" : "clear"
+    checkChanged("tamper", tamper)
   }
-  if (params.impulseType) {
-    state.impulseType = params.impulseType
+  if (deviceInfo.lastUpdate) {
+    state.lastUpdate = deviceInfo.lastUpdate
   }
-  if (params.lastCommTime) {
-    state.signalStrength = params.lastCommTime
+  if (deviceInfo.impulseType) {
+    state.impulseType = deviceInfo.impulseType
   }
-  if (params.nextExpectedWakeup) {
-    state.nextExpectedWakeup = params.nextExpectedWakeup
+  if (deviceInfo.lastCommTime) {
+    state.signalStrength = deviceInfo.lastCommTime
   }
-  if (params.signalStrength) {
-    state.signalStrength = params.signalStrength
+  if (deviceInfo.nextExpectedWakeup) {
+    state.nextExpectedWakeup = deviceInfo.nextExpectedWakeup
   }
-  if (params.firmware && device.getDataValue("firmware") != params.firmware) {
-    device.updateDataValue("firmware", params.firmware)
+  if (deviceInfo.signalStrength) {
+    state.signalStrength = deviceInfo.signalStrength
   }
-  if (params.hardwareVersion && device.getDataValue("hardwareVersion") != params.hardwareVersion) {
-    device.updateDataValue("hardwareVersion", params.hardwareVersion)
+  if (deviceInfo.firmware && device.getDataValue("firmware") != deviceInfo.firmware) {
+    device.updateDataValue("firmware", deviceInfo.firmware)
+  }
+  if (deviceInfo.hardwareVersion && device.getDataValue("hardwareVersion") != deviceInfo.hardwareVersion) {
+    device.updateDataValue("hardwareVersion", deviceInfo.hardwareVersion)
+  }
+
+}
+
+def checkChanged(attribute, newStatus) {
+  if (device.currentValue(attribute) != newStatus) {
+    logInfo "${attribute.capitalize()} for device ${device.label} is ${newStatus}"
+    sendEvent(name: attribute, value: newStatus)
   }
 }
+
 /*
 def childParse(type, params = []) {
-  logDebug "childParse(type, params)"
-  logTrace "type ${type}"
-  logTrace "params ${params}"
+logDebug "childParse(type, params)"
+logTrace "type ${type}"
+logTrace "params ${params}"
 
-  if (type == "refresh-device") {
-    logTrace "refresh"
-    handleRefresh(params.msg)
-  }
-  else if (type == "chime-motion" || type == "chime-ding") {
-    logTrace "beep"
-    handleBeep(type, params.response)
-  }
-  else if (type == "chime-volume" || type == "chime-mute" || type == "chime-unmute") {
-    logTrace "volume"
-    handleVolume(type, params)
-  }
-  else {
-    log.error "Unhandled type ${type}"
-  }
+if (type == "refresh-device") {
+logTrace "refresh"
+handleRefresh(params.msg)
+}
+else if (type == "chime-motion" || type == "chime-ding") {
+logTrace "beep"
+handleBeep(type, params.response)
+}
+else if (type == "chime-volume" || type == "chime-mute" || type == "chime-unmute") {
+logTrace "volume"
+handleVolume(type, params)
+}
+else {
+log.error "Unhandled type ${type}"
+}
 }
 
 private handleBeep(id, result) {
-  logTrace "handleBeep(${id}, ${result})"
-  if (result != 204) {
-    log.warn "Not successful?"
-    return
-  }
-  logInfo "Device ${device.label} played ${id.split("-")[1]}"
+logTrace "handleBeep(${id}, ${result})"
+if (result != 204) {
+log.warn "Not successful?"
+return
+}
+logInfo "Device ${device.label} played ${id.split("-")[1]}"
 }
 
 private handleVolume(id, params) {
-  logTrace "handleVolume(${id}, ${params})"
-  if (params.response != 204) {
-    log.warn "Not successful?"
-    return
-  }
-  if (id == "chime-mute") {
-    sendEvent(name: "mute", value: "muted")
-    logInfo "Device ${device.label} set to muted"
-  }
-  else if (id == "chime-unmute") {
-    sendEvent(name: "mute", value: "unmuted")
-    logInfo "Device ${device.label} set to unmuted"
-  }
-  else {
-    sendEvent(name: "volume", value: (params.volume as Integer) * 10)
-    logInfo "Device ${device.label} volume set to ${params.volume}"
-  }
+logTrace "handleVolume(${id}, ${params})"
+if (params.response != 204) {
+log.warn "Not successful?"
+return
+}
+if (id == "chime-mute") {
+sendEvent(name: "mute", value: "muted")
+logInfo "Device ${device.label} set to muted"
+}
+else if (id == "chime-unmute") {
+sendEvent(name: "mute", value: "unmuted")
+logInfo "Device ${device.label} set to unmuted"
+}
+else {
+sendEvent(name: "volume", value: (params.volume as Integer) * 10)
+logInfo "Device ${device.label} volume set to ${params.volume}"
+}
 }
 
 private handleRefresh(json) {
-  logDebug "handleRefresh(json)"
-  logTrace "json ${json}"
-  if (!json.settings) {
-    log.warn "No volume?"
-    return
-  }
-  if (device.currentValue("volume") != (json.settings.volume as Integer) * 10) {
-    sendEvent(name: "volume", value: (json.settings.volume as Integer) * 10)
-    logInfo "Device ${device.label} volume set to ${(json.settings.volume as Integer) * 10}"
-  }
-  if (device.currentValue("mute") == null) {
-    sendEvent(name: "mute", value: "unmuted")
-    logInfo "Device ${device.label} set to unmuted"
-  }
-  if (state.prevVolume == null) {
-    state.prevVolume = 50
-    logInfo "No previous volume found so arbitrary value given"
-  }
+logDebug "handleRefresh(json)"
+logTrace "json ${json}"
+if (!json.settings) {
+log.warn "No volume?"
+return
+}
+if (device.currentValue("volume") != (json.settings.volume as Integer) * 10) {
+sendEvent(name: "volume", value: (json.settings.volume as Integer) * 10)
+logInfo "Device ${device.label} volume set to ${(json.settings.volume as Integer) * 10}"
+}
+if (device.currentValue("mute") == null) {
+sendEvent(name: "mute", value: "unmuted")
+logInfo "Device ${device.label} set to unmuted"
+}
+if (state.prevVolume == null) {
+state.prevVolume = 50
+logInfo "No previous volume found so arbitrary value given"
+}
 }
 */

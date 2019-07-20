@@ -1,5 +1,5 @@
 /**
- *  Ring Virtual Motion Sensor Driver
+ *  Ring Virtual Alarm Smoke & CO Listener Driver
  *
  *  Copyright 2019 Ben Rimmasch
  *
@@ -21,12 +21,18 @@
 import groovy.json.JsonSlurper
 
 metadata {
-  definition(name: "Ring Virtual Motion Sensor", namespace: "codahq-hubitat", author: "Ben Rimmasch") {
+  definition(name: "Ring Virtual Alarm Smoke & CO Listener", namespace: "codahq-hubitat", author: "Ben Rimmasch") {
     capability "Refresh"
     capability "Sensor"
     capability "Motion Sensor"
     capability "Battery"
     capability "TamperAlert"
+    capability "CarbonMonoxideDetector" //carbonMonoxide - ENUM ["detected", "tested", "clear"]
+    capability "SmokeDetector" //smoke - ENUM ["clear", "tested", "detected"]
+
+    attribute "listeningCarbonMonoxide", "string"
+    attribute "listeningSmoke", "string"
+    attribute "testMode", "string"
   }
 
   preferences {
@@ -57,9 +63,26 @@ def setValues(deviceInfo) {
   logDebug "updateDevice(deviceInfo)"
   logTrace "deviceInfo: ${deviceInfo}"
 
-  if (deviceInfo.state && deviceInfo.state.faulted != null) {
-    def motion = deviceInfo.state.faulted ? "active" : "inactive"
-    checkChanged("motion", motion)
+  if (deviceInfo.state && deviceInfo.state.co != null) {
+    def carbonMonoxide = (deviceInfo.state.co.alarmStatus == "active") ? "detected" : (deviceInfo.state.co.alarmStatus == "inactive" ? "clear" : "tested")
+    checkChanged("carbonMonoxide", carbonMonoxide)
+    state.coEnabled = deviceInfo.state.co.enabledTimeMs
+  }
+  if (deviceInfo.state && deviceInfo.state.co != null) {
+    def listeningCarbonMonoxide = deviceInfo.state.co.enabled ? "listening" : "inactive"
+    checkChanged("listeningCarbonMonoxide", listeningCarbonMonoxide)
+  }
+  if (deviceInfo.state && deviceInfo.state.smoke != null) {
+    def smoke = (deviceInfo.state.smoke.alarmStatus == "active") ? "detected" : (deviceInfo.state.smoke.alarmStatus == "inactive" ? "clear" : "tested")
+    checkChanged("smoke", smoke)
+    state.smokeEnabled = deviceInfo.state.smoke.enabledTimeMs
+  }
+  if (deviceInfo.state && deviceInfo.state.co != null) {
+    def listeningSmoke = deviceInfo.state.smoke.enabled ? "listening" : "inactive"
+    checkChanged("listeningSmoke", listeningSmoke)
+  }
+  if (deviceInfo.state && deviceInfo.state.testMode != null) {
+    checkChanged("testMode", deviceInfo.state.testMode)
   }
   if (deviceInfo.batteryLevel) {
     checkChanged("battery", deviceInfo.batteryLevel)
@@ -98,77 +121,3 @@ def checkChanged(attribute, newStatus) {
     sendEvent(name: attribute, value: newStatus)
   }
 }
-
-/*
-def childParse(type, params = []) {
-  logDebug "childParse(type, params)"
-  logTrace "type ${type}"
-  logTrace "params ${params}"
-
-  if (type == "refresh-device") {
-    logTrace "refresh"
-    handleRefresh(params.msg)
-  }
-  else if (type == "chime-motion" || type == "chime-ding") {
-    logTrace "beep"
-    handleBeep(type, params.response)
-  }
-  else if (type == "chime-volume" || type == "chime-mute" || type == "chime-unmute") {
-    logTrace "volume"
-    handleVolume(type, params)
-  }
-  else {
-    log.error "Unhandled type ${type}"
-  }
-}
-
-private handleBeep(id, result) {
-  logTrace "handleBeep(${id}, ${result})"
-  if (result != 204) {
-    log.warn "Not successful?"
-    return
-  }
-  logInfo "Device ${device.label} played ${id.split("-")[1]}"
-}
-
-private handleVolume(id, params) {
-  logTrace "handleVolume(${id}, ${params})"
-  if (params.response != 204) {
-    log.warn "Not successful?"
-    return
-  }
-  if (id == "chime-mute") {
-    sendEvent(name: "mute", value: "muted")
-    logInfo "Device ${device.label} set to muted"
-  }
-  else if (id == "chime-unmute") {
-    sendEvent(name: "mute", value: "unmuted")
-    logInfo "Device ${device.label} set to unmuted"
-  }
-  else {
-    sendEvent(name: "volume", value: (params.volume as Integer) * 10)
-    logInfo "Device ${device.label} volume set to ${params.volume}"
-  }
-}
-
-private handleRefresh(json) {
-  logDebug "handleRefresh(json)"
-  logTrace "json ${json}"
-  if (!json.settings) {
-    log.warn "No volume?"
-    return
-  }
-  if (device.currentValue("volume") != (json.settings.volume as Integer) * 10) {
-    sendEvent(name: "volume", value: (json.settings.volume as Integer) * 10)
-    logInfo "Device ${device.label} volume set to ${(json.settings.volume as Integer) * 10}"
-  }
-  if (device.currentValue("mute") == null) {
-    sendEvent(name: "mute", value: "unmuted")
-    logInfo "Device ${device.label} set to unmuted"
-  }
-  if (state.prevVolume == null) {
-    state.prevVolume = 50
-    logInfo "No previous volume found so arbitrary value given"
-  }
-}
-*/

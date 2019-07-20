@@ -61,7 +61,22 @@ def testCommand() {
   //simpleRequest("manager", [dst: "***REMOVED***"])
   //simpleRequest("finddev", [dst: "***REMOVED***", adapterId: "zwave"])
   //simpleRequest("sirenon", [dst: "***REMOVED***"])
-  parent.simpleRequest("master-key", [dni: device.deviceNetworkId, code: "5555", name: "Guest"])
+
+  //parent.simpleRequest("master-key", [dni: device.deviceNetworkId, code: "5555", name: "Guest"])
+
+  /*
+
+def zeroEpoch = Calendar.getInstance(TimeZone.getTimeZone('GMT'))
+zeroEpoch.setTimeInMillis(0)
+println zeroEpoch.format("dd-MMM-yyyy HH:mm:ss zzz")
+https://currentmillis.com/
+
+*/
+
+  //location.getTimeZone().properties.each {log.warn it}
+  location.properties.each { log.warn it }
+  device.properties.each { log.warn it }
+  devices.properties.each { log.warn it }
 }
 
 def parse(String description) {
@@ -79,11 +94,22 @@ def parse(String description) {
     def slurper = new groovy.json.JsonSlurper()
     def json = slurper.parseText(msg)
     //logTrace "json: $json"
+
+    def deviceInfos = []
+
     if (json[0].equals("DataUpdate")) {
-      handleUpdate(json[1])
+      //handleUpdate(json[1])
+      deviceInfos += extractDeviceInfos(json[1])
     }
     else if (json[0].equals("message") && json[1].msg == "DeviceInfoDocGetList" && json[1].datatype == "DeviceInfoDocType") {
-      handleRefresh(json[1].body, state.createDevices, json[1].src)
+      //handleRefresh(json[1].body, state.createDevices, json[1].src)
+
+      deviceInfos += extractDeviceInfos(json[1])
+
+      if (state.createDevices) {
+        createDevice([deviceType: json[1].context.assetKind, zid: json[1].context.assetId, src: json[1].src])
+      }
+
       if (state.createDevices) state.createDevices = false
     }
     else if (json[0].equals("message") && json[1].msg == "DeviceInfoSet") {
@@ -107,6 +133,16 @@ def parse(String description) {
     else {
       log.warn "huh? what's this?"
       log.warn description
+    }
+
+    deviceInfos.each {
+      //if (it.src == '***REMOVED***')
+      logTrace "created deviceInfo: ${JsonOutput.prettyPrint(JsonOutput.toJson(it))}"
+
+      if (state.createDevices) {
+        createDevice(it)
+      }
+      sendUpdate(it)
     }
   }
 }
@@ -184,19 +220,25 @@ def simpleRequest(type, params = [:]) {
   logDebug "simpleRequest(${type})"
   logTrace "params: ${params}"
 
-  def request = JsonOutput.toJson(getRequests(params).getAt(type))
-  logTrace "request: ${request}"
-
-  if (request == null || type == "setcode" || type == "adduser" || type == "enableuser") {
-    return
+  if (isParentRequest(type)) {
+    logTrace "parent request: $type"
+    parent.simpleRequest(type, [dni: params.dni, type: params.type])
   }
+  else {
+    def request = JsonOutput.toJson(getRequests(params).getAt(type))
+    logTrace "request: ${request}"
 
-  try {
-    sendMsg(MESSAGE_PREFIX + request)
-  }
-  catch (e) {
-    log.warn "exception: ${e} cause: ${ex.getCause()}"
-    log.warn "request type: ${type} request: ${request}"
+    if (request == null || type == "setcode" || type == "adduser" || type == "enableuser") {
+      return
+    }
+
+    try {
+      sendMsg(MESSAGE_PREFIX + request)
+    }
+    catch (e) {
+      log.warn "exception: ${e} cause: ${ex.getCause()}"
+      log.warn "request type: ${type} request: ${request}"
+    }
   }
 }
 
@@ -221,16 +263,17 @@ private getRequests(parts) {
       dst: parts.dst,
       seq: state.seq
     ]],
-    "sirenon": ["message", [  //super broken.  do not use
-      msg: "DeviceInfoSet",
-      datatype: "DeviceInfoSetType",
+    "setsiren": ["message", [
       body: [[
         zid: parts.zid,
         command: [v1: [[
-          commandType: "security-panel.sound-siren"
+          commandType: "security-panel.${parts.mode}",
+          data: {}
         ]]]
       ]],
+      datatype: "DeviceInfoSetType",
       dst: parts.dst,
+      msg: "DeviceInfoSet",
       seq: state.seq
     ]],
     "finddev": ["message", [   //working but not used
@@ -253,10 +296,43 @@ private getRequests(parts) {
       dst: parts.dst,
       seq: state.seq
     ]],
+    "siren-test": ["message", [
+      body: [[
+        zid: parts.zid,
+        command: [v1: [[
+          commandType: "siren-test.${parts.mode}",
+          data: {}
+        ]]]
+      ]],
+      datatype: "DeviceInfoSetType",
+      dst: null,
+      msg: "DeviceInfoSet",
+      seq: state.seq
+    ]],
     "set-volume-keypad": ["message", [
       body: [[
         zid: parts.dst,
-        device: ["v1": ["volume": (parts.volume?.toDouble() ?: 50) / 100]]
+        device: ["v1": ["volume": (parts.volume == null ? 50 : parts.volume).toDouble() / 100]]
+      ]],
+      datatype: "DeviceInfoSetType",
+      dst: null,
+      msg: "DeviceInfoSet",
+      seq: state.seq
+    ]],
+    "set-brightness-keypad": ["message", [
+      body: [[
+        zid: parts.dst,
+        device: ["v1": ["brightness": (parts.brightness == null ? 100 : parts.brightness).toDouble() / 100]]
+      ]],
+      datatype: "DeviceInfoSetType",
+      dst: null,
+      msg: "DeviceInfoSet",
+      seq: state.seq
+    ]],
+    "set-volume-base": ["message", [
+      body: [[
+        zid: parts.zid,
+        device: ["v1": ["volume": (parts.volume == null ? 50 : parts.volume).toDouble() / 100]]
       ]],
       datatype: "DeviceInfoSetType",
       dst: null,
@@ -343,9 +419,6 @@ private getRequests(parts) {
       seq: state.seq
     ]],
 
-    //set volume base station 42["message",{"body":[{"zid":"***REMOVED***","device":{"v1":{"volume":0.89}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":4}]
-    //test siren base station 42["message",{"body":[{"zid":"***REMOVED***","command":{"v1":[{"commandType":"siren-test.start","data":{}}]}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":5}]
-    //set volume keypad       42["message",{"body":[{"zid":"***REMOVED***","device":{"v1":{"volume":0.64}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":6}]
     //set power save keypad   42["message",{"body":[{"zid":"***REMOVED***","device":{"v1":{"powerSave":"extended"}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":7}]
     //set power save off keyp 42["message",{"body":[{"zid":"***REMOVED***","device":{"v1":{"powerSave":"off"}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":8}]
     //test mode motion detctr 42["message",{"body":[{"zid":"***REMOVED***","command":{"v1":[{"commandType":"detection-test-mode.start","data":{}}]}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":9}]
@@ -425,275 +498,666 @@ def reconnectWebSocket() {
   runIn(state.reconnectDelay, initialize)
 }
 
+/*
 private handleUpdate(update) {
   //logDebug "handleUpdate(update)"
   //logTrace "update: $update"
   if (update.msg == "DataUpdate" && update.datatype == "DeviceInfoDocType") {
-    handleDeviceInfo(update.body[0], update.src)
+    //handleDeviceInfo(update.body[0], update.src)
   }
   else if (update.msg == "Passthru" && update.datatype == "PassthruType") {
-    handleCountdown(update.body[0], update.src)
+    //handleCountdown(update.body[0], update.src)
   }
   else if (update.msg == "SessionInfo" && update.datatype == "SessionInfoType") {
-    handleSessionInfo(update.body[0])
+    //handleSessionInfo(update.body[0])
   }
   else {
     log.warn "update not handled"
     log.warn JsonOutput.prettyPrint(JsonOutput.toJson(update))
   }
 }
+*/
+
+/*
 
 private getMODES() {
-  return [
-    "none": "off",
-    "some": "home",
-    "all": "away"
-  ]
+return [
+"none": "off",
+"some": "home",
+"all" : "away"
+]
 }
+
 
 //Device
 private handleDeviceInfo(info, src) {
-  //logDebug "handleDeviceInfo(info)"
-  //logTrace "info: $info"
-  try {
-    if (info.general.v2.adapterType == "zwave" || (info.general.v2.adapterType == "none" && info.general.v2.deviceType == 'security-panel')) {
-      logDebug "Z-wave update from device ${info.context.v1.deviceName} with catalogId ${info.general.v2.catalogId} and zid ${info.general.v2.zid}"
-      //log.trace "info: $info"
-      def d = getChildDevices()?.find {
-        it.deviceNetworkId == getFormattedDNI(info.general.v2.zid)
-      }
-      if (!d) {
-        logDebug "no device for ${info.context.v1.deviceName} with zid ${info.general.v2.zid}"
-        //logTrace "info: ${JsonOutput.prettyPrint(JsonOutput.toJson(info))}"
-        //TODO: more device types
-      }
-      else if (!info.impulse && !info.device) {
-        logTrace "lonely update?  should I just handle these as heartbeats even though they don't have an impulse or device?"
-        logTrace "info: ${JsonOutput.prettyPrint(JsonOutput.toJson(info))}"
-        logDebug "device ${info.context.v1.deviceName} with zid ${info.general.v2.zid} category ${info.context.v1.categoryId} subcategory ${info.context.v1.subCategoryId}"
-        if (info.context.v1.categoryId == 33 && info.context.v1.subCategoryId == 0) {
-          d.setValues(["motion": "active"])
-        }
-      }
-      else if (info.impulse &&
-        (info.impulse?.v1[0]?.impulseType == "comm.heartbeat"
-          || info.impulse?.v1[0]?.impulseType == "comm.wakeup"
-          || info.impulse?.v1[0]?.impulseType == "error.comm.wakeup-missed")) {
-        handleHeartbeat(d, info)
-      }
-      else if (info.impulse && info.impulse?.v1[0]?.impulseType == "network-stats.update-delta") {
-        //i'll just hold onto this for later in case i use it to update routes or something
-      }
-      else if (d.getDataValue("type") == "sensor.contact" && info.device?.v1) {
-        d.setValues(["contact": info.device.v1.faulted ? "open" : "closed"])
-      }
-      else if (d.getDataValue("type") == "sensor.motion" && info.device?.v1) {
-        d.setValues(["motion": info.device.v1.faulted ? "active" : "inactive"])
-      }
-      else if (d.getDataValue("type") == "security-keypad" && info.device?.v1) {
-        if (info.device.v1.volume != null) {
-          d.setValues(["volume": info.device.v1.volume.toDouble() * 100])
-        }
-      }
-      else if (d.getDataValue("type") == "security-panel" && info.device?.v1) {
-        if (info.device.v1.transitionDelayEndTimestamp && info.general?.v2?.lastUpdate) {
-          def secs = (info.device.v1.transitionDelayEndTimestamp - info.general.v2.lastUpdate) / 1000
-          logInfo "Ring Alarm will exit delay in ${secs} seconds"
-        }
-        if (info.device.v1.mode) {
-          d.setValues(["mode": MODES["${info.device.v1.mode}"]])
-        }
-      }
-      else if (d.getDataValue("type") == "lock" && info.device?.v1) {
-        d.setValues(["lock": info.device.v1.locked])
-      }
-      else {
-        d.properties.each { log.warn it }
-        log.warn "info not handled for device ${d} with type ${d.getDataValue("type")}"
-        log.warn JsonOutput.prettyPrint(JsonOutput.toJson(info))
-      }
-    }
-    else if (info.impulse?.v1?.getAt(0)?.impulseType == "vault.user-added") {
-      logDebug "User added"
-      logTrace "User added context: ${info.context.v1}"
-      state.codes = info.context.v1.device.v1.codes
-    }
-    else if (info.general.v2.adapterType == "ringnet") {
-      logDebug "${info.general.v2.adapterType} update from device ${info.context.v1.deviceName} with zid ${info.general.v2.zid}"
-      //stub for unreleased beams hardware
-    }
-    else if (info.general.v2.adapterType == "none") {
-      logDebug "Update from device ${info.context.v1.deviceName} with zid ${info.general.v2.zid}"
-      //not impleted yet
-    }
-    else {
-      logTrace "type not handled ${info.general.v2.adapterType} from source ${src}"
-      logTrace JsonOutput.prettyPrint(JsonOutput.toJson(info))
-    }
-  }
-  catch (e) {
-    log.error "handleDeviceInfo error: ${e.message} ${e}"
-    log.error "info: ${JsonOutput.prettyPrint(JsonOutput.toJson(info))}"
-  }
+//logDebug "handleDeviceInfo(info)"
+//logTrace "info: $info"
+try {
+if (info.general.v2.adapterType == "zwave" || (info.general.v2.adapterType == "none" && info.general.v2.deviceType in ['security-panel', 'hub.redsky'])) {
+logDebug "Update from ${info.general.v2.adapterType} device ${info.context.v1.deviceName} with catalogId ${info.general.v2.catalogId} and zid ${info.general.v2.zid}"
+//log.trace "info: $info"
+def d = getChildDevices()?.find {
+it.deviceNetworkId == getFormattedDNI(info.general.v2.zid)
+}
+if (!d) {
+logDebug "no device for ${info.context.v1.deviceName} with zid ${info.general.v2.zid}"
+//logTrace "info: ${JsonOutput.prettyPrint(JsonOutput.toJson(info))}"
+//TODO: more device types
+}
+else if (!info.impulse && !info.device) {
+//logTrace "lonely update?  should I just handle these as heartbeats even though they don't have an impulse or device?"
+//logTrace "info: ${JsonOutput.prettyPrint(JsonOutput.toJson(info))}"
+
+logTrace "TODO:  this is probably a keypad motion if type is keypad"
+
+logDebug "device ${info.context.v1.deviceName} with zid ${info.general.v2.zid} category ${info.context.v1.categoryId} subcategory ${info.context.v1.subCategoryId}"
+if (info.context.v1.categoryId == 33 && info.context.v1.subCategoryId == 0) {
+d.setValues(["motion": "active"])
+}
+}
+else if (info.impulse &&
+(info.impulse?.v1[0]?.impulseType == "comm.heartbeat"
+|| info.impulse?.v1[0]?.impulseType == "comm.wakeup"
+|| info.impulse?.v1[0]?.impulseType == "error.comm.wakeup-missed")) {
+handleHeartbeat(d, info)
+}
+else if (info.impulse && info.impulse?.v1[0]?.impulseType == "network-stats.update-delta") {
+//i'll just hold onto this for later in case i use it to update routes or something
+}
+else if (d.getDataValue("type") == "sensor.contact") {
+handleContactSensor(d, info)
+}
+else if (d.getDataValue("type") == "sensor.motion") {
+handleMotionSensor(d, info)
+}
+else if (d.getDataValue("type") in ["security-keypad", "hub.redsky"]) {
+if (info.device?.v1 && info.device.v1.volume != null) {
+d.setValues(["volume": info.device.v1.volume.toDouble() * 100])
+}
+if (info.impulse?.v1?.impulseType == "system-event.maintainer") {
+d.setValues(["firmware": "${info.impulse?.v1?.data.version}"])
+}
+if (info.impulse?.v1?.impulseType == "keypad.attempt-switch-mode") {
+d.setValues(["mode": MODES["${info.impulse?.v1?.data.mode}"]])
+}
+}
+else if (d.getDataValue("type") == "security-panel") {
+if (info.device?.v1 && info.device.v1.transitionDelayEndTimestamp && info.general?.v2?.lastUpdate) {
+def secs = (info.device.v1.transitionDelayEndTimestamp - info.general.v2.lastUpdate) / 1000
+logInfo "Ring Alarm will exit delay in ${secs} seconds"
+}
+if (info.device?.v1 && info.device.v1.mode) {
+d.setValues(["mode": MODES["${info.device.v1.mode}"]])
+}
+if (info.impulse?.v1 && info.impulse.v1.impulseType == "command.complete" && info.impulse.v1.data.commandType == "security-panel.switch-mode") {
+d.setValues(["mode": MODES["${info.impulse.v1.data.data.mode}"]])
+}
+if (info.device?.v1 && info.device.v1.siren != null) {
+d.setValues(["alarm": info.device.v1.siren.state == "on" ? "siren" : "off" ])
+}
+}
+else if (d.getDataValue("type") == "lock" && info.device?.v1) {
+d.setValues(["lock": info.device.v1.locked])
+}
+else {
+d.properties.each { log.warn it }
+log.warn "info not handled for device ${d} with type ${d.getDataValue("type")}"
+log.warn JsonOutput.prettyPrint(JsonOutput.toJson(info))
+}
+}
+else if (info.impulse?.v1?.getAt(0)?.impulseType == "vault.user-added") {
+logDebug "User added"
+logTrace "User added context: ${info.context.v1}"
+state.codes = info.context.v1.device.v1.codes
+}
+else if (info.general.v2.adapterType == "ringnet") {
+logDebug "${info.general.v2.adapterType} update from device ${info.context.v1.deviceName} with zid ${info.general.v2.zid}"
+//stub for unreleased beams hardware
+}
+else if (info.general.v2.adapterType == "none") {
+logDebug "Update from device ${info.context.v1.deviceName} with zid ${info.general.v2.zid}"
+//not impleted yet
+}
+else {
+logTrace "type not handled ${info.general.v2.adapterType} from source ${src}"
+logTrace JsonOutput.prettyPrint(JsonOutput.toJson(info))
+}
+}
+catch (e) {
+log.error "handleDeviceInfo error: ${e.message} ${e}"
+log.error "info: ${JsonOutput.prettyPrint(JsonOutput.toJson(info))}"
+}
+}
+*/
+
+/*
+private handleContactSensor(d, info) {
+if (info.device?.v1) {
+d.setValues(["contact": info.device.v1.faulted ? "open" : "closed"])
+}
+else if (info.impulse?.v1?.getAt(0)?.impulseType == "tampered" || info.impulse?.v1?.getAt(0)?.impulseType == "tampered-cleared") {
+d.setValues(["tamper": info.general.v2.tamperStatus == "tamper" ? "detected" : "clear"])
+}
+else {
+log.warn "Unhandled contact sensor update for device ${d} with type ${d.getDataValue("type")}"
+log.warn JsonOutput.prettyPrint(JsonOutput.toJson(info))
+}
 }
 
+private handleMotionSensor(d, info) {
+if (info.device?.v1) {
+d.setValues(["motion": info.device.v1.faulted ? "active" : "inactive"])
+}
+else if (info.impulse?.v1?.getAt(0)?.impulseType == "tampered" || info.impulse?.v1?.getAt(0)?.impulseType == "tampered-cleared") {
+d.setValues(["tamper": info.general.v2.tamperStatus == "tamper" ? "detected" : "clear"])
+}
+else {
+log.warn "Unhandled motion sensor update for device ${d} with type ${d.getDataValue("type")}"
+log.warn JsonOutput.prettyPrint(JsonOutput.toJson(info))
+}
+}
+*/
+
+/*
 //Countdown
 private handleCountdown(info, src) {
-  //logDebug "handleCountdown(info)"
-  //logTrace "info: $info"
-  try {
-    if (info.data) {
-      logDebug "Passthru update ${info.type} for zid ${info.zid} with remaining/total ${info.data.timeLeft}/${info.data.total} and transition ${info.data.transition}"
-      //log.trace "info: $info"
-      def d = getChildDevices()?.find {
-        it.deviceNetworkId == getFormattedDNI(info.zid)
-      }
-      if (!d) {
-        logDebug "no countdown from ${src} for device zid ${info.zid}"
-        //logTrace "info: ${JsonOutput.prettyPrint(JsonOutput.toJson(info))}"
-        //TODO: more device types
-      }
-      else {
-        logDebug "tick: remaining/total ${info.data.timeLeft}/${info.data.total}"
-      }
-    }
-    else {
-      logTrace "passthru not handled ${info.zid} from source ${src}"
-      logTrace JsonOutput.prettyPrint(JsonOutput.toJson(info))
-    }
-  }
-  catch (e) {
-    log.error "handleCountdown error: ${e.message} ${e}"
-    log.error "info: ${JsonOutput.prettyPrint(JsonOutput.toJson(info))}"
-  }
+//logDebug "handleCountdown(info)"
+//logTrace "info: $info"
+try {
+if (info.data) {
+logDebug "Passthru update ${info.type} for zid ${info.zid} with remaining/total ${info.data.timeLeft}/${info.data.total} and transition ${info.data.transition}"
+//log.trace "info: $info"
+def d = getChildDevices()?.find {
+it.deviceNetworkId == getFormattedDNI(info.zid)
 }
+if (!d) {
+logDebug "no countdown from ${src} for device zid ${info.zid}"
+//logTrace "info: ${JsonOutput.prettyPrint(JsonOutput.toJson(info))}"
+//TODO: more device types
+}
+else {
+logDebug "tick: remaining/total ${info.data.timeLeft}/${info.data.total}"
+}
+}
+else {
+logTrace "passthru not handled ${info.zid} from source ${src}"
+logTrace JsonOutput.prettyPrint(JsonOutput.toJson(info))
+}
+}
+catch (e) {
+log.error "handleCountdown error: ${e.message} ${e}"
+log.error "info: ${JsonOutput.prettyPrint(JsonOutput.toJson(info))}"
+}
+}
+*
 
 //Session
 private handleSessionInfo(session) {
-  logInfo "Connected for a ${session.kind} with doorbotId ${session.doorbotId} and assetUuid ${session.assetUuid}"
+logInfo "Connected for a ${session.kind} with doorbotId ${session.doorbotId} and assetUuid ${session.assetUuid}"
 }
 
+/*
 private handleHeartbeat(d, info) {
-  logDebug "handleHeartbeat(d, info)"
-  logTrace "type: ${info.impulse?.v1[0]?.impulseType}"
-  //logTrace "info: ${JsonOutput.prettyPrint(JsonOutput.toJson(info))}"
-  try {
-    def params = [:]
-    if (info.general.v2.lastUpdate) {
-      params << ["lastUpdate": info.general.v2.lastUpdate]
-    }
-    if (info.impulse?.v1[0]?.impulseType) {
-      params << ["impulseType": info.impulse?.v1[0]?.impulseType]
-    }
-    if (info.general.v2.lastCommTime) {
-      params << ["lastCommTime": info.general.v2.lastCommTime]
-    }
-    if (info.general.v2.nextExpectedWakeup) {
-      params << ["nextExpectedWakeup": info.general.v2.nextExpectedWakeup]
-    }
-    if (info.context.v1.adapter.v1.signalStrength) {
-      params << ["signalStrength": info.context.v1.adapter.v1.signalStrength]
-    }
-    if (info.context.v1.adapter.v1.fingerprint.firmware) {
-      params << ["firmware": "${info.context.v1.adapter.v1.fingerprint.firmware.version}.${info.context.v1.adapter.v1.fingerprint.firmware.subversion}"]
-    }
-    if (info.context.v1.adapter.v1.fingerprint.hardwareVersion) {
-      params << ["hardwareVersion": "${info.context.v1.adapter.v1.fingerprint.hardwareVersion}"]
-    }
-    logTrace "params: ${params}"
-    d.setValues(params)
-  }
-  catch (e) {
-    log.error "handleHeartbeat error: ${e.message} ${e}"
-    log.error "info: ${JsonOutput.prettyPrint(JsonOutput.toJson(info))}"
-  }
+logDebug "handleHeartbeat(d, info)"
+logTrace "type: ${info.impulse?.v1[0]?.impulseType}"
+//logTrace "info: ${JsonOutput.prettyPrint(JsonOutput.toJson(info))}"
+try {
+def params = [:]
+if (info.general.v2.lastUpdate) {
+params << ["lastUpdate": info.general.v2.lastUpdate]
+}
+if (info.impulse?.v1[0]?.impulseType) {
+params << ["impulseType": info.impulse?.v1[0]?.impulseType]
+}
+if (info.general.v2.lastCommTime) {
+params << ["lastCommTime": info.general.v2.lastCommTime]
+}
+if (info.general.v2.nextExpectedWakeup) {
+params << ["nextExpectedWakeup": info.general.v2.nextExpectedWakeup]
+}
+if (info.context.v1.adapter.v1.signalStrength) {
+params << ["signalStrength": info.context.v1.adapter.v1.signalStrength]
+}
+if (info.context.v1.adapter.v1.fingerprint.firmware) {
+params << ["firmware": "${info.context.v1.adapter.v1.fingerprint.firmware.version}.${info.context.v1.adapter.v1.fingerprint.firmware.subversion}"]
+}
+if (info.context.v1.adapter.v1.fingerprint.hardwareVersion) {
+params << ["hardwareVersion": "${info.context.v1.adapter.v1.fingerprint.hardwareVersion}"]
+}
+logTrace "params: ${params}"
+d.setValues(params)
+}
+catch (e) {
+log.error "handleHeartbeat error: ${e.message} ${e}"
+log.error "info: ${JsonOutput.prettyPrint(JsonOutput.toJson(info))}"
+}
 }
 
 private handleRefresh(body, create = false, src) {
-  logDebug "handleRefresh(body, create == ${create}, src == ${src})"
-  //logTrace "body: ${JsonOutput.prettyPrint(JsonOutput.toJson(body))}"
+logDebug "handleRefresh(body, create == ${create}, src == ${src})"
+//logTrace "body: ${JsonOutput.prettyPrint(JsonOutput.toJson(body))}"
 
-  def sensors = body.findAll { dev ->
-    (dev.general.v2.adapterType == 'zwave' && DEVICE_TYPES["${dev.general.v2.deviceType}"]) || (dev.general.v2.adapterType == 'none' && DEVICE_TYPES["${dev.general.v2.deviceType}"])
-  }
-  refreshSensors(sensors, create, src)
+def hubNode = body.find { dev -> dev.general.v2.deviceType == "hub.redsky" }
+
+def sensors = body.findAll { dev ->
+(dev.general.v2.adapterType == 'zwave' && DEVICE_TYPES["${dev.general.v2.deviceType}"]) || (dev.general.v2.adapterType == 'none' && DEVICE_TYPES["${dev.general.v2.deviceType}"])
+}
+refreshSensors(sensors, create, src, hubNode)
 }
 
-private refreshSensors(sensors, create, src) {
-  sensors.each { sensor ->
-    if (create) {
-      logDebug "Found ${sensor.general.v2.name}"
-      //logTrace "sensor: ${JsonOutput.prettyPrint(JsonOutput.toJson(sensor))}"
-      logTrace "general sensor info ::: catalogId: ${sensor.general.v2.catalogId}, zid: ${sensor.general.v2.zid},"
-      logTrace "deviceFoundTime: ${sensor.general.v2.deviceFoundTime}, deviceType: ${sensor.general.v2.deviceType}, fingerprint: ${sensor.general.v2.fingerprint},"
-      logTrace "manufacturerName: ${sensor.general.v2.manufacturerName}, serialNumber: ${sensor.general.v2.serialNumber}, tamperStatus: ${sensor.general.v2.tamperStatus},"
-    }
-
-    def d
-    if (sensor.general.v2.zid) {
-      d = getChildDevices()?.find {
-        it.deviceNetworkId == getFormattedDNI(sensor.general.v2.zid)
-      }
-    }
-
-    //devices that don't have drivers that store in the API device
-    if (sensor.general.v2.deviceType == "access-code.vault") {
-      device.updateDataValue("vault_zid", sensor.general.v2.zid)
-    }
-    else if (sensor.general.v2.deviceType == "access-code") {
-      def codes = state.codes ?: [:]
-      if (!codes."${sensor.general.v2.zid}") {
-        codes << ["${sensor.general.v2.zid}": [name: sensor.general.v2.name, adapterZid: sensor.general.v2.adapterZid]]
-      }
-      else {
-        codes[sensor.general.v2.zid] = [name: sensor.general.v2.name, adapterZid: sensor.general.v2.adapterZid]
-      }
-      logTrace "codes: ${codes}"
-      state.codes = codes
-    }
-
-    if (create) {
-      if (!d) {
-        //devices that have drivers that store in devices
-        log.warn "Creating a ${sensor.general.v2.name} (${sensor.general.v2.deviceType}) with dni: ${getFormattedDNI(sensor.general.v2.zid)}"
-        try {
-          d = addChildDevice("codahq-hubitat", DEVICE_TYPES[sensor.general.v2.deviceType].name, getFormattedDNI(sensor.general.v2.zid), [
-            //"label": sensor.general.v2.name,
-            "zid": sensor.general.v2.zid,
-            "fingerprint": sensor.general.v2.fingerprint ?: "N/A",
-            "manufacturer": sensor.general.v2.manufacturerName ?: "Ring",
-            "serial": sensor.general.v2.serialNumber ?: "N/A",
-            "type": sensor.general.v2.deviceType,
-            "dst": src
-          ])
-          d.label = sensor.general.v2.name
-          log.warn "Succesfully added ${sensor.general.v2.deviceType} with dni: ${getFormattedDNI(sensor.general.v2.zid)}"
-        }
-        catch (e) {
-          log.error "An error occured ${e}"
-        }
-      }
-      else {
-        logDebug "No need to create device ${d}"
-      }
-    }
-    if (d) {
-      logTrace "state for ${sensor.general.v2.name} ::: faulted: ${sensor.device.v1.faulted}, locked: ${sensor.device.v1.locked}, batteryLevel: ${sensor.general.v2.batteryLevel}"
-      if (sensor.general.v2.deviceType == "sensor.contact") {
-        d.setValues(["contact": sensor.device.v1.faulted ? "open" : "closed"])
-      }
-      if (sensor.general.v2.deviceType == "sensor.motion") {
-        d.setValues(["motion": sensor.device.v1.faulted ? "active" : "inactive"])
-      }
-      d.setValues(["battery": sensor.general.v2.batteryLevel])
-    }
-
-  }
+private refreshSensors(sensors, create, src, hubNode) {
+sensors.each { sensor ->
+if (create) {
+logDebug "Found ${sensor.general.v2.name}"
+//logTrace "sensor: ${JsonOutput.prettyPrint(JsonOutput.toJson(sensor))}"
+logTrace "general sensor info ::: catalogId: ${sensor.general.v2.catalogId}, zid: ${sensor.general.v2.zid},"
+logTrace "deviceFoundTime: ${sensor.general.v2.deviceFoundTime}, deviceType: ${sensor.general.v2.deviceType}, fingerprint: ${sensor.general.v2.fingerprint},"
+logTrace "manufacturerName: ${sensor.general.v2.manufacturerName}, serialNumber: ${sensor.general.v2.serialNumber}, tamperStatus: ${sensor.general.v2.tamperStatus},"
 }
+
+def d
+if (sensor.general.v2.zid) {
+d = getChildDevices()?.find {
+it.deviceNetworkId == getFormattedDNI(sensor.general.v2.zid)
+}
+}
+
+//devices that don't have drivers that store in the API device
+if (sensor.general.v2.deviceType == "access-code.vault") {
+device.updateDataValue("vault_zid", sensor.general.v2.zid)
+}
+else if (sensor.general.v2.deviceType == "access-code") {
+def codes = state.codes ?: [:]
+if (!codes."${sensor.general.v2.zid}") {
+codes << ["${sensor.general.v2.zid}": [name: sensor.general.v2.name, adapterZid: sensor.general.v2.adapterZid]]
+}
+else {
+codes[sensor.general.v2.zid] = [name: sensor.general.v2.name, adapterZid: sensor.general.v2.adapterZid]
+}
+logTrace "codes: ${codes}"
+state.codes = codes
+}
+else if (create) {
+if (!d) {
+//devices that have drivers that store in devices
+log.warn "Creating a ${sensor.general.v2.name} (${sensor.general.v2.deviceType}) with dni: ${getFormattedDNI(sensor.general.v2.zid)}"
+try {
+
+def data = [
+//"label": sensor.general.v2.name,
+"zid"         : sensor.general.v2.zid,
+"fingerprint" : sensor.general.v2.fingerprint ?: "N/A",
+"manufacturer": sensor.general.v2.manufacturerName ?: "Ring",
+"serial"      : sensor.general.v2.serialNumber ?: "N/A",
+"type"        : sensor.general.v2.deviceType,
+"dst"         : src
+]
+if (sensor.general.v2.deviceType == "security-panel") {
+data << ["hub-zid": hubNode.general.v2.zid]
+}
+
+d = addChildDevice("codahq-hubitat", DEVICE_TYPES[sensor.general.v2.deviceType].name, getFormattedDNI(sensor.general.v2.zid), data)
+d.label = sensor.general.v2.name
+log.warn "Succesfully added ${sensor.general.v2.deviceType} with dni: ${getFormattedDNI(sensor.general.v2.zid)}"
+}
+catch (e) {
+log.error "An error occured ${e}"
+}
+}
+else {
+logDebug "No need to create device ${d}"
+}
+}
+if (d) {
+//logTrace "state for ${sensor.general.v2.name} ::: faulted: ${sensor.device.v1.faulted}, locked: ${sensor.device.v1.locked}, batteryLevel: ${sensor.general.v2.batteryLevel}, volume: ${sensor.device.v1.volume}"
+//logTrace JsonOutput.prettyPrint(JsonOutput.toJson(sensor))
+if (sensor.general.v2.deviceType == "sensor.contact") {
+d.setValues(["contact": sensor.device.v1.faulted ? "open" : "closed"])
+}
+if (sensor.general.v2.deviceType == "sensor.motion") {
+d.setValues(["motion": sensor.device.v1.faulted ? "active" : "inactive"])
+}
+if (sensor.general.v2.deviceType in ["security-keypad", "hub.redsky"]) {
+d.setValues(["volume": sensor.device.v1.volume.toDouble() * 100])
+}
+if (sensor.general.v2.deviceType == "security-panel") {
+d.setValues(["mode": MODES["${sensor.device.v1.mode}"]])
+}
+d.setValues(["battery": sensor.general.v2.batteryLevel])
+}
+
+}
+}
+*/
 
 def uninstalled() {
   getChildDevices().each {
     deleteChildDevice(it.deviceNetworkId)
+  }
+}
+
+def boolean isParentRequest(type) {
+  return ["refresh-security-device"].contains(type)
+}
+
+
+def extractDeviceInfos(json) {
+  logDebug "extractDeviceInfos(json)"
+  //logTrace "json: ${JsonOutput.prettyPrint(JsonOutput.toJson(json))}"
+
+  //if (json.msg == "Passthru" && update.datatype == "PassthruType")
+  if (json.msg != "DataUpdate") {
+    logTrace "json: ${JsonOutput.prettyPrint(JsonOutput.toJson(json))}"
+  }
+
+  def deviceInfos = []
+
+  def orig = json
+
+  def jsonSlurper = new JsonSlurper()
+  def jsonString = '''
+{
+"deviceType": ""
+}
+'''
+
+  //"lastUpdate": "",
+  //"contact": "closed",
+  //"motion": "inactive"
+
+  def returnResult = jsonSlurper.parseText(jsonString)
+
+  returnResult.src = json.src
+
+  if (json.context) {
+    def tmpContext = json.context
+    returnResult.eventOccurredTsMs = tmpContext.eventOccurredTsMs
+    returnResult.level = tmpContext.eventLevel
+    returnResult.affectedEntityType = tmpContext.affectedEntityType
+    returnResult.affectedEntityId = tmpContext.affectedEntityId
+    returnResult.affectedEntityName = tmpContext.affectedEntityName
+    returnResult.accountId = tmpContext.accountId
+    returnResult.assetId = tmpContext.assetId
+    returnResult.assetKind = tmpContext.assetKind
+  }
+
+  //iterate each device
+  json.body.each {
+    def copy = new JsonSlurper().parseText(JsonOutput.toJson(returnResult))
+
+    def deviceJson = it
+    //logTrace "now deviceJson: ${JsonOutput.prettyPrint(JsonOutput.toJson(deviceJson))}"
+    if (!deviceJson) {
+      deviceInfos << copy
+    }
+
+    if (deviceJson.general) {
+      def tmpGeneral
+      if (deviceJson.general.v1) {
+        tmpGeneral = deviceJson.general.v1
+      }
+      else {
+        tmpGeneral = deviceJson.general.v2
+      }
+      copy.lastUpdate = tmpGeneral.lastUpdate
+      copy.lastCommTime = tmpGeneral.lastCommTime
+      copy.nextExpectedWakeup = tmpGeneral.nextExpectedWakeup
+      copy.deviceType = tmpGeneral.deviceType
+      copy.adapterType = tmpGeneral.adapterType
+      copy.zid = tmpGeneral.zid
+      copy.roomId = tmpGeneral.roomId
+      copy.serialNumber = tmpGeneral.serialNumber
+      copy.fingerprint = tmpGeneral.fingerprint
+      copy.manufacturerName = tmpGeneral.manufacturerName
+      copy.tamperStatus = tmpGeneral.tamperStatus
+      copy.name = tmpGeneral.name
+      copy.acStatus = tmpGeneral.acStatus
+      copy.batteryLevel = tmpGeneral.batteryLevel
+      copy.batteryStatus = tmpGeneral.batteryStatus
+      if (tmpGeneral.componentDevices) {
+        copy.componentDevices = tmpGeneral.componentDevices
+      }
+    }
+    if (deviceJson.context || deviceJson.adapter) {
+      def tmpAdapter
+      if (deviceJson.context?.v1?.adapter?.v1) {
+        tmpAdapter = deviceJson.context.v1.adapter.v1
+      }
+      else if (deviceJson.adapter?.v1) {
+        tmpAdapter = deviceJson.adapter?.v1
+      }
+
+      copy.signalStrength = tmpAdapter?.signalStrength
+      copy.firmware = tmpAdapter?.firmwareVersion
+      if (tmpAdapter?.fingerprint?.firmware?.version)
+        copy.firmware = "${tmpAdapter?.fingerprint?.firmware?.version}.${tmpAdapter?.fingerprint?.firmware?.subversion}"
+      copy.hardwareVersion = tmpAdapter?.fingerprint?.hardwareVersion.toString()
+
+      def tmpContext = deviceJson.context?.v1
+      copy.deviceName = tmpContext?.deviceName
+      copy.roomName = tmpContext?.roomName
+    }
+    if (deviceJson.impulse) {
+      def tmpImpulse
+      if (deviceJson.impulse?.v1[0]) {
+        tmpImpulse = deviceJson.impulse?.v1[0]
+      }
+      copy.impulseType = tmpImpulse.impulseType
+
+      copy.impulses = deviceJson.impulse.v1.collectEntries {
+        [(it.impulseType): it.data]
+      }
+
+    }
+
+    //if (deviceJson.adapter) {
+    //  copy.signalStrength = [deviceJson.adapter.v1]
+    //}
+
+    if (deviceJson.device) {
+      tmpDevice
+      //logTrace "what has this device? ${tmpDevice}"
+      if (deviceJson.device.v1) {
+        copy.state = deviceJson.device.v1
+        //copy.faulted = tmpDevice.faulted
+        //copy.mode = tmpDevice.mode
+      }
+
+    }
+
+    //likely a passthru
+    if (deviceJson.data) {
+      copy.state = deviceJson.data
+      copy.zid = deviceJson.zid
+      copy.deviceType = deviceJson.type
+    }
+
+    deviceInfos << copy
+
+    //if (copy.deviceType == "range-extender.zwave") {
+    //  log.warn "range-extender.zwave message: ${JsonOutput.prettyPrint(JsonOutput.toJson(deviceJson))}"
+    //}
+    if (copy.deviceType == null) {
+      log.warn "null device type message?: ${JsonOutput.prettyPrint(JsonOutput.toJson(deviceJson))}"
+    }
+
+  }
+
+  logTrace "found ${deviceInfos.size()} devices"
+
+  return deviceInfos
+}
+
+/*
+def extractDeviceInfo(json) {
+logDebug "extractDeviceInfo(json)"
+//logTrace "json: ${JsonOutput.prettyPrint(JsonOutput.toJson(json))}"
+
+def orig = json
+
+def jsonSlurper = new JsonSlurper()
+def jsonString = '''
+{
+"deviceType": ""
+}
+'''
+
+//"lastUpdate": "",
+//"contact": "closed",
+//"motion": "inactive"
+
+def returnResult = jsonSlurper.parseText(jsonString)
+returnResult.src = json.src
+
+if (json.context) {
+def tmpContext = json.context
+returnResult.eventOccurredTsMs = tmpContext.eventOccurredTsMs
+returnResult.level = tmpContext.eventLevel
+returnResult.affectedEntityType = tmpContext.affectedEntityType
+returnResult.affectedEntityId = tmpContext.affectedEntityId
+returnResult.affectedEntityName = tmpContext.affectedEntityName
+returnResult.accountId = tmpContext.accountId
+returnResult.assetId = tmpContext.assetId
+returnResult.assetKind = tmpContext.assetKind
+}
+
+json = readjustJson(json)
+//logTrace "now json: ${JsonOutput.prettyPrint(JsonOutput.toJson(json))}"
+if (!json) {
+return returnResult
+}
+
+if (json.general) {
+def tmpGeneral
+if (json.general.v1) {
+tmpGeneral = json.general.v1
+}
+else {
+tmpGeneral = json.general.v2
+}
+returnResult.lastUpdate = tmpGeneral.lastUpdate
+returnResult.lastCommTime = tmpGeneral.lastCommTime
+returnResult.nextExpectedWakeup = tmpGeneral.nextExpectedWakeup
+returnResult.deviceType = tmpGeneral.deviceType
+returnResult.adapterType = tmpGeneral.adapterType
+returnResult.zid = tmpGeneral.zid
+}
+if (json.context) {
+def tmpAdapter
+if (json.context?.v1?.adapter?.v1) {
+tmpAdapter = json.context.v1.adapter.v1
+returnResult.signalStrength = tmpAdapter.signalStrength
+if (tmpAdapter.firmwareVersion) {
+returnResult.firmware = tmpAdapter.firmwareVersion
+}
+else if (tmpAdapter.fingerprint) {
+returnResult.firmware = "${tmpAdapter.fingerprint?.firmware?.version}.${tmpAdapter.fingerprint?.firmware?.subversion}"
+returnResult.hardwareVersion = tmpAdapter.fingerprint?.hardwareVersion
+}
+}
+def tmpContext = json.context.v1
+returnResult.name = tmpContext.deviceName
+returnResult.room = tmpContext.roomName
+}
+if (json.impulse) {
+def tmpImpulse
+if (json.impulse?.v1[0]) {
+tmpImpulse = json.impulse?.v1[0]
+}
+returnResult.impulseType = tmpImpulse.impulseType
+
+returnResult.impulses = json.impulse.v1.collectEntries {
+[(it.impulseType): it.data]
+}
+
+}
+
+if (json.adapter) {
+returnResult.signalStrength = [json.adapter.v1]
+}
+
+if (json.device) {
+tmpDevice
+if (json.device.v1) {
+tmpDevice = json.device.v1
+}
+returnResult.faulted = tmpDevice.faulted
+returnResult.mode = tmpDevice.mode
+
+}
+
+//if (returnResult.deviceType == "security-keypad") {
+//  logTrace "orig: ${JsonOutput.prettyPrint(JsonOutput.toJson(orig))}"
+//}
+
+return returnResult
+}
+
+def readjustJson(json) {
+if (!json.general) {
+if (json.body[0].general) {
+return json.body[0]
+}
+}
+}
+*/
+
+def createDevice(deviceInfo) {
+
+  def d = getChildDevices()?.find {
+    it.deviceNetworkId == getFormattedDNI(deviceInfo.zid)
+  }
+  if (!d) {
+    //devices that have drivers that store in devices
+    log.warn "Creating a ${DEVICE_TYPES[deviceInfo.deviceType].name} (${deviceInfo.deviceType}) with dni: ${getFormattedDNI(deviceInfo.zid)}"
+    try {
+
+      def data = [
+        "zid": deviceInfo.zid,
+        "fingerprint": deviceInfo.fingerprint ?: "N/A",
+        "manufacturer": deviceInfo.manufacturerName ?: "Ring",
+        "serial": deviceInfo.serialNumber ?: "N/A",
+        "type": deviceInfo.deviceType,
+        "src": deviceInfo.src
+      ]
+      //if (sensor.general.v2.deviceType == "security-panel") {
+      //  data << ["hub-zid": hubNode.general.v2.zid]
+      //}
+
+      d = addChildDevice("codahq-hubitat", DEVICE_TYPES[deviceInfo.deviceType].name, getFormattedDNI(deviceInfo.zid), data)
+      d.label = deviceInfo.name ?: DEVICE_TYPES[deviceInfo.deviceType].name
+      log.warn "Succesfully added ${deviceInfo.deviceType} with dni: ${getFormattedDNI(deviceInfo.zid)}"
+    }
+    catch (e) {
+      log.error "An error occured ${e}"
+    }
+  }
+  else {
+    logDebug "No need to create device ${d}"
+  }
+
+}
+
+def sendUpdate(deviceInfo) {
+  logDebug "sendUpdate(deviceInfo)"
+  //logTrace "deviceInfo: ${deviceInfo}"
+
+  if (DEVICE_TYPES[deviceInfo.deviceType] == null) {
+    log.warn "Unsupported device type! ${deviceInfo.deviceType}"
+    return
+  }
+
+  def dni = DEVICE_TYPES[deviceInfo.deviceType].hidden ? deviceInfo.assetId : deviceInfo.zid
+  def d = getChildDevices()?.find {
+    it.deviceNetworkId == getFormattedDNI(dni)
+  }
+  if (!d) {
+    log.warn "Couldn't find device ${deviceInfo.name} of type ${deviceInfo.deviceType} with zid ${deviceInfo.zid}"
+  }
+  else {
+    logDebug "Updating device ${d}"
+    d.setValues(deviceInfo)
   }
 }
 
@@ -703,14 +1167,20 @@ private getMESSAGE_PREFIX() {
 
 private getDEVICE_TYPES() {
   return [
-    "sensor.contact": [name: "Ring Virtual Contact Sensor"],
-    "sensor.motion": [name: "Ring Virtual Motion Sensor"],
-    "adapter.zwave": [name: "Ring Z-Wave Adapter"],
-    "security-panel": [name: "Ring Alarm Base Station"],
-    "lock": [name: "Ring Virtual Lock"],
-    "access-code.vault": [name: "Code Vault"],
-    "access-code": [name: "Access Code"],
-    "security-keypad": [name: "Ring Virtual Keypad"]
+    //physical devices
+    "sensor.contact": [name: "Ring Virtual Contact Sensor", hidden: false],
+    "sensor.motion": [name: "Ring Virtual Motion Sensor", hidden: false],
+    "listener.smoke-co": [name: "Ring Virtual Alarm Smoke & CO Listener", hidden: false],
+    "range-extender.zwave": [name: "Ring Virtual Alarm Range Extender", hidden: false],
+    "lock": [name: "Ring Virtual Lock", hidden: false],
+    "security-keypad": [name: "Ring Virtual Keypad", hidden: false],
+    "base_station_v1": [name: "Ring Alarm Hub", hidden: false],
+    //virtual devices
+    "adapter.zwave": [name: "Ring Z-Wave Adapter", hidden: true],
+    "security-panel": [name: "Ring Alarm Security Panel", hidden: true],
+    "hub.redsky": [name: "Ring Alarm Base Station", hidden: true],
+    "access-code.vault": [name: "Code Vault", hidden: true],
+    "access-code": [name: "Access Code", hidden: true]
   ]
 }
 
@@ -722,4 +1192,8 @@ def String getRingDeviceId(dni) {
   //logDebug "getRingDeviceId(dni)"
   //logTrace "dni: ${dni}"
   return dni?.split("||")?.getAt(1)
+}
+
+def getChildByZID(zid) {
+  return getChildDevices()?.find { it.deviceNetworkId == getFormattedDNI(dni) }
 }

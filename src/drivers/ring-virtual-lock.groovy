@@ -61,35 +61,47 @@ def unlock() {
   parent.simpleRequest("setlock", [mode: "unlock", zid: device.getDataValue("zid"), dst: device.getDataValue("dst")])
 }
 
-def setValues(params) {
-  logDebug "setValues(params)"
-  logTrace "params: ${params}"
-  if (params.lock && device.currentValue("lock") != params.lock) {
-    logInfo "Device ${device.label} is ${params.lock}"
-    sendEvent(name: "lock", value: params.lock)
+def setValues(deviceInfo) {
+  logDebug "updateDevice(deviceInfo)"
+  logTrace "deviceInfo: ${deviceInfo}"
+
+  if (deviceInfo.state && deviceInfo.state.locked != null) {
+    checkChanged("lock", deviceInfo.state.locked)
   }
-  if (params.battery) {
-    sendEvent(name: "battery", value: params.battery)
+  if (deviceInfo.batteryLevel) {
+    checkChanged("battery", deviceInfo.batteryLevel)
   }
-  if (params.lastUpdate) {
-    state.lastUpdate = params.lastUpdate
+  if (deviceInfo.tamperStatus) {
+    def tamper = deviceInfo.tamperStatus == "tamper" ? "detected" : "clear"
+    checkChanged("tamper", tamper)
   }
-  if (params.impulseType) {
-    state.impulseType = params.impulseType
+  if (deviceInfo.lastUpdate) {
+    state.lastUpdate = deviceInfo.lastUpdate
   }
-  if (params.lastCommTime) {
-    state.signalStrength = params.lastCommTime
+  if (deviceInfo.impulseType) {
+    state.impulseType = deviceInfo.impulseType
   }
-  if (params.nextExpectedWakeup) {
-    state.nextExpectedWakeup = params.nextExpectedWakeup
+  if (deviceInfo.lastCommTime) {
+    state.signalStrength = deviceInfo.lastCommTime
   }
-  if (params.signalStrength) {
-    state.signalStrength = params.signalStrength
+  if (deviceInfo.nextExpectedWakeup) {
+    state.nextExpectedWakeup = deviceInfo.nextExpectedWakeup
   }
-  if (params.firmware && device.getDataValue("firmware") != params.firmware) {
-    device.updateDataValue("firmware", params.firmware)
+  if (deviceInfo.signalStrength) {
+    state.signalStrength = deviceInfo.signalStrength
   }
-  if (params.hardwareVersion && device.getDataValue("hardwareVersion") != params.hardwareVersion) {
-    device.updateDataValue("hardwareVersion", params.hardwareVersion)
+  if (deviceInfo.firmware && device.getDataValue("firmware") != deviceInfo.firmware) {
+    device.updateDataValue("firmware", deviceInfo.firmware)
+  }
+  if (deviceInfo.hardwareVersion && device.getDataValue("hardwareVersion") != deviceInfo.hardwareVersion) {
+    device.updateDataValue("hardwareVersion", deviceInfo.hardwareVersion)
+  }
+
+}
+
+def checkChanged(attribute, newStatus) {
+  if (device.currentValue(attribute) != newStatus) {
+    logInfo "${attribute.capitalize()} for device ${device.label} is ${newStatus}"
+    sendEvent(name: attribute, value: newStatus)
   }
 }

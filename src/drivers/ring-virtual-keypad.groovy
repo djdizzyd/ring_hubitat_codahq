@@ -26,6 +26,11 @@ metadata {
     capability "Motion Sensor"
     capability "Audio Volume"
     capability "Battery"
+
+    attribute "mode", "string"
+    attribute "brightness", "number"
+
+    command "setBrightness", [[name: "Set LED Brightness*", type: "NUMBER", range: "0..100", description: "Choose a value between 0 and 100"]]
   }
 
   preferences {
@@ -113,6 +118,11 @@ private isMuted() {
   return device.currentValue("mute") == "muted"
 }
 
+def setBrightness(brightness) {
+  logDebug "Attempting to set brightness ${brightness}."
+  parent.simpleRequest("set-brightness-keypad", [dst: device.getDataValue("zid"), brightness: brightness])
+}
+
 def refresh() {
   logDebug "Attempting to refresh."
   parent.simpleRequest("refresh", [dst: device.deviceNetworkId])
@@ -122,38 +132,68 @@ def stopMotion() {
   sendEvent([name: "motion", value: "inactive"])
 }
 
-def setValues(params) {
-  if (params.volume != null) {
-    sendEvent([name: "volume", value: params.volume])
+def setValues(deviceInfo) {
+  logDebug "updateDevice(deviceInfo)"
+  logTrace "deviceInfo: ${deviceInfo}"
+
+  if (deviceInfo.state && deviceInfo.state.volume != null) {
+    def volume = deviceInfo.state.volume.toDouble() * 100
+    checkChanged("volume", volume)
   }
-  if (params.motion) {
-    unschedule()
-    sendEvent([name: "motion", value: params.motion])
-    runIn(motionTimeout.toInteger(), stopMotion)
+
+  //TODO: probably only when mode changes?
+  //if (params.mode && device.currentValue("mode") != params.mode) {
+  //  logInfo "Alarm mode for device ${device.label} is ${params.mode}"
+  //  sendEvent(name: "mode", value: params.mode)
+  //}
+
+  //TODO: see if i want to support motion here
+  //if (params.motion) {
+  //  unschedule()
+  //  sendEvent([name: "motion", value: params.motion])
+  //  runIn(motionTimeout.toInteger(), stopMotion)
+  //}
+
+  if (deviceInfo.state && deviceInfo.state.brightness != null) {
+    def brightness = deviceInfo.state.brightness.toDouble() * 100
+    checkChanged("brightness", brightness)
   }
-  if (params.battery) {
-    sendEvent(name: "battery", value: params.battery)
+
+  if (deviceInfo.batteryLevel) {
+    checkChanged("battery", deviceInfo.batteryLevel)
   }
-  if (params.lastUpdate) {
-    state.lastUpdate = params.lastUpdate
+  if (deviceInfo.tamperStatus) {
+    def tamper = deviceInfo.tamperStatus == "tamper" ? "detected" : "clear"
+    checkChanged("tamper", tamper)
   }
-  if (params.impulseType) {
-    state.impulseType = params.impulseType
+  if (deviceInfo.lastUpdate) {
+    state.lastUpdate = deviceInfo.lastUpdate
   }
-  if (params.lastCommTime) {
-    state.signalStrength = params.lastCommTime
+  if (deviceInfo.impulseType) {
+    state.impulseType = deviceInfo.impulseType
   }
-  if (params.nextExpectedWakeup) {
-    state.nextExpectedWakeup = params.nextExpectedWakeup
+  if (deviceInfo.lastCommTime) {
+    state.signalStrength = deviceInfo.lastCommTime
   }
-  if (params.signalStrength) {
-    state.signalStrength = params.signalStrength
+  if (deviceInfo.nextExpectedWakeup) {
+    state.nextExpectedWakeup = deviceInfo.nextExpectedWakeup
   }
-  if (params.firmware && device.getDataValue("firmware") != params.firmware) {
-    device.updateDataValue("firmware", params.firmware)
+  if (deviceInfo.signalStrength) {
+    state.signalStrength = deviceInfo.signalStrength
   }
-  if (params.hardwareVersion && device.getDataValue("hardwareVersion") != params.hardwareVersion) {
-    device.updateDataValue("hardwareVersion", params.hardwareVersion)
+  if (deviceInfo.firmware && device.getDataValue("firmware") != deviceInfo.firmware) {
+    device.updateDataValue("firmware", deviceInfo.firmware)
+  }
+  if (deviceInfo.hardwareVersion && device.getDataValue("hardwareVersion") != deviceInfo.hardwareVersion) {
+    device.updateDataValue("hardwareVersion", deviceInfo.hardwareVersion)
+  }
+
+}
+
+def checkChanged(attribute, newStatus) {
+  if (device.currentValue(attribute) != newStatus) {
+    logInfo "${attribute.capitalize()} for device ${device.label} is ${newStatus}"
+    sendEvent(name: attribute, value: newStatus)
   }
 }
 
