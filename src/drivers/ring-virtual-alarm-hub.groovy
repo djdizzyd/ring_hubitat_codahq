@@ -37,6 +37,7 @@ metadata {
     command "setBrightness", [[name: "Set LED Brightness*", type: "NUMBER", range: "0..100", description: "Choose a value between 0 and 100"]]
     command "setMode", [[name: "Set Mode*", type: "ENUM", description: "Set the Ring Alarm's mode", constraints: ["Disarmed", "Home", "Away"]]]
     command "sirenTest"
+    command "createDevices"
   }
 
   preferences {
@@ -64,6 +65,16 @@ private getVOLUME_INC() {
   return 5 //somebody can make this a preference if they feel strongly about it
 }
 
+def createDevices() {
+  logDebug "Attempting to create devices."
+  parent.createDevices(device.getDataValue("zid"))
+}
+
+def refresh() {
+  logDebug "Attempting to refresh."
+  parent.refresh(device.getDataValue("zid"))
+}
+
 def setMode(mode) {
   logDebug "setMode(${mode})"
   if (mode == "Disarmed" && device.currentValue("mode") != "off") {
@@ -78,11 +89,6 @@ def setMode(mode) {
   else {
     logInfo "${device.label} already set to ${mode}.  No change necessary"
   }
-}
-
-def refresh() {
-  logDebug "Attempting to refresh."
-  parent.simpleRequest("refresh", [dst: device.deviceNetworkId])
 }
 
 /*alarm capabilities start*/

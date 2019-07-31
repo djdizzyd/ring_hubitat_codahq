@@ -29,7 +29,6 @@ metadata {
     capability "Initialize"
     capability "Refresh"
 
-    command "createDevices"
     command "testCommand"
   }
 
@@ -79,69 +78,6 @@ https://currentmillis.com/
   devices.properties.each { log.warn it }
 }
 
-def parse(String description) {
-  //logDebug "parse(description)"
-  //logTrace "description: ${description}"
-  if (description.equals("2")) {
-    //keep alive
-    sendMsg("2")
-  }
-  else if (description.equals("3")) {
-    //Do nothing. keep alive response
-  }
-  else if (description.startsWith(MESSAGE_PREFIX)) {
-    def msg = description.substring(MESSAGE_PREFIX.length())
-    def slurper = new groovy.json.JsonSlurper()
-    def json = slurper.parseText(msg)
-    //logTrace "json: $json"
-
-    def deviceInfos = []
-
-    if (json[0].equals("DataUpdate")) {
-      deviceInfos += extractDeviceInfos(json[1])
-    }
-    else if (json[0].equals("message") && json[1].msg == "DeviceInfoDocGetList" && json[1].datatype == "DeviceInfoDocType") {
-      deviceInfos += extractDeviceInfos(json[1])
-
-      if (state.createDevices) {
-        createDevice([deviceType: json[1].context.assetKind, zid: json[1].context.assetId, src: json[1].src])
-      }
-      if (state.createDevices) state.createDevices = false
-    }
-    else if (json[0].equals("message") && json[1].msg == "DeviceInfoSet") {
-      if (json[1].status == 0) {
-        logTrace "DeviceInfoSet with seq ${json[1].seq} succeeded."
-      }
-      else {
-        log.warn "I think a DeviceInfoSet failed?"
-        log.warn description
-      }
-    }
-    else if (json[0].equals("message") && json[1].msg == "SetKeychainValue") {
-      if (json[1].status == 0) {
-        logTrace "SetKeychainValue with seq ${json[1].seq} succeeded."
-      }
-      else {
-        log.warn "I think a SetKeychainValue failed?"
-        log.warn description
-      }
-    }
-    else {
-      log.warn "huh? what's this?"
-      log.warn description
-    }
-
-    deviceInfos.each {
-      //if (it.src == '***REMOVED***')
-      logTrace "created deviceInfo: ${JsonOutput.prettyPrint(JsonOutput.toJson(it))}"
-
-      if (state.createDevices) {
-        createDevice(it)
-      }
-      sendUpdate(it)
-    }
-  }
-}
 
 def initialize() {
   logDebug "initialize()"
@@ -151,16 +87,27 @@ def initialize() {
 }
 
 def updated() {
-  refresh()
+  //refresh()
 }
 
-def refresh() {
+/**
+ * This will create all devices possible. If the user doesn't want some of them they will have to delete them manually for now.
+ * The reason I had to do it this way is because I couldn't find a non websockets API call to get a list of alarm devices.
+ */
+def createDevices(zid) {
+  logDebug "createDevices(${zid})"
+  state.createDevices = true
+  refresh(zid)
+}
+
+def refresh(zid) {
   //def dst = "***REMOVED***"
+  logDebug "refresh(${zid})"
   unschedule()
   state.updatedDate = now()
   state.hubs?.each { hub ->
-    if (hub.kind == "base_station_v1") {
-      logInfo "Refreshing hub ${hub.zid}"
+    if (hub.zid == zid || zid == null) {
+      logInfo "Refreshing hub ${hub.zid} with kind ${hub.kind}"
       simpleRequest("refresh", [dst: hub.zid])
     }
   }
@@ -182,14 +129,6 @@ def customPolling() {
   runIn(pollingInterval * 60 * 60, customPolling)  //time in seconds
 }
 
-/**
- * This will create all devices possible. If the user doesn't want some of them they will have to delete them manually for now.
- * The reason I had to do it this way is because I couldn't find a non websockets API call to get a list of alarm devices.
- */
-def createDevices() {
-  state.createDevices = true
-  refresh()
-}
 
 def childParse(type, params = []) {
   logDebug "childParse(type, params)"
@@ -414,6 +353,47 @@ private getRequests(parts) {
       dst: parts.dst,
       seq: state.seq
     ]],
+    "setlight": ["message", [
+      body: [[
+        zid: parts.zid,
+        command: [v1: [[
+          commandType: "light-mode.set",
+          data: [
+            "lightMode": parts.switch,
+            "duration": parts.duration
+          ]
+        ]]]
+      ]],
+      datatype: "DeviceInfoSetType",
+      dst: parts.dst,
+      msg: "DeviceInfoSet",
+      seq: state.seq
+    ]],
+    "setcommand": ["message", [
+      body: [[
+        zid: parts.zid,
+        command: [v1: [[
+          commandType: parts.type,
+          data: parts.data
+        ]]]
+      ]],
+      datatype: "DeviceInfoSetType",
+      dst: parts.dst,
+      msg: "DeviceInfoSet",
+      seq: state.seq
+    ]],
+    "setdevice": ["message", [
+      body: [[
+        zid: parts.zid,
+        device: [v1:
+          parts.data
+        ]
+      ]],
+      datatype: "DeviceInfoSetType",
+      dst: parts.dst,
+      msg: "DeviceInfoSet",
+      seq: state.seq
+    ]],
 
     //set power save keypad   42["message",{"body":[{"zid":"***REMOVED***","device":{"v1":{"powerSave":"extended"}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":7}]
     //set power save off keyp 42["message",{"body":[{"zid":"***REMOVED***","device":{"v1":{"powerSave":"off"}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":8}]
@@ -500,8 +480,73 @@ def uninstalled() {
   }
 }
 
-def boolean isParentRequest(type) {
-  return ["refresh-security-device"].contains(type)
+def parse(String description) {
+  //logDebug "parse(description)"
+  //logTrace "description: ${description}"
+  if (description.equals("2")) {
+    //keep alive
+    sendMsg("2")
+  }
+  else if (description.equals("3")) {
+    //Do nothing. keep alive response
+  }
+  else if (description.startsWith(MESSAGE_PREFIX)) {
+    def msg = description.substring(MESSAGE_PREFIX.length())
+    def slurper = new groovy.json.JsonSlurper()
+    def json = slurper.parseText(msg)
+    //logTrace "json: $json"
+
+    def deviceInfos = []
+
+    if (json[0].equals("DataUpdate")) {
+      deviceInfos += extractDeviceInfos(json[1])
+    }
+    else if (json[0].equals("message") && json[1].msg == "DeviceInfoDocGetList" && json[1].datatype == "DeviceInfoDocType") {
+      deviceInfos += extractDeviceInfos(json[1])
+
+      if (!getChildByZID(json[1].context.assetId)) {
+        createDevice([deviceType: json[1].context.assetKind, zid: json[1].context.assetId, src: json[1].src])
+      }
+    }
+    else if (json[0].equals("message") && json[1].msg == "DeviceInfoSet") {
+      if (json[1].status == 0) {
+        logTrace "DeviceInfoSet with seq ${json[1].seq} succeeded."
+      }
+      else {
+        log.warn "I think a DeviceInfoSet failed?"
+        log.warn description
+      }
+    }
+    else if (json[0].equals("message") && json[1].msg == "SetKeychainValue") {
+      if (json[1].status == 0) {
+        logTrace "SetKeychainValue with seq ${json[1].seq} succeeded."
+      }
+      else {
+        log.warn "I think a SetKeychainValue failed?"
+        log.warn description
+      }
+    }
+    else {
+      log.warn "huh? what's this?"
+      log.warn description
+    }
+
+    deviceInfos.each {
+      //if (it.src == '***REMOVED***')
+      logTrace "created deviceInfo: ${JsonOutput.prettyPrint(JsonOutput.toJson(it))}"
+
+      if (it?.msg == "Passthru") {
+        sendPassthru(it)
+      }
+      else {
+        if (state.createDevices) {
+          createDevice(it)
+        }
+        sendUpdate(it)
+      }
+    }
+    if (state.createDevices) state.createDevices = false
+  }
 }
 
 def extractDeviceInfos(json) {
@@ -509,7 +554,11 @@ def extractDeviceInfos(json) {
   //logTrace "json: ${JsonOutput.prettyPrint(JsonOutput.toJson(json))}"
 
   //if (json.msg == "Passthru" && update.datatype == "PassthruType")
-  if (json.msg != "DataUpdate") {
+  if (IGNORED_MSG_TYPES.contains(json.msg)) {
+    return
+  }
+  if (json.msg != "DataUpdate" && json.msg != "DeviceInfoDocGetList") {
+    logTrace "msg type: ${json.msg}"
     logTrace "json: ${JsonOutput.prettyPrint(JsonOutput.toJson(json))}"
   }
 
@@ -531,6 +580,7 @@ def extractDeviceInfos(json) {
   def returnResult = jsonSlurper.parseText(jsonString)
 
   returnResult.src = json.src
+  returnResult.msg = json.msg
 
   if (json.context) {
     def tmpContext = json.context
@@ -630,8 +680,9 @@ def extractDeviceInfos(json) {
 
     //likely a passthru
     if (deviceJson.data) {
+      assert returnResult.msg == 'Passthru'
       copy.state = deviceJson.data
-      copy.zid = deviceJson.zid
+      copy.zid = copy.assetId
       copy.deviceType = deviceJson.type
     }
 
@@ -653,6 +704,13 @@ def extractDeviceInfos(json) {
 
 
 def createDevice(deviceInfo) {
+  logDebug "createDevice(deviceInfo)"
+  logTrace "deviceInfo: ${deviceInfo}"
+
+  if (deviceInfo == null || deviceInfo.deviceType == null || DEVICE_TYPES[deviceInfo.deviceType] == null || DEVICE_TYPES[deviceInfo.deviceType].hidden) {
+    logDebug "Not a creatable device. ${deviceInfo.deviceType}"
+    return
+  }
 
   def d = getChildDevices()?.find {
     it.deviceNetworkId == getFormattedDNI(deviceInfo.zid)
@@ -683,7 +741,7 @@ def createDevice(deviceInfo) {
     }
   }
   else {
-    logDebug "No need to create device ${d}"
+    logDebug "Device ${d} already exists. No need to create."
   }
 
 }
@@ -692,6 +750,10 @@ def sendUpdate(deviceInfo) {
   logDebug "sendUpdate(deviceInfo)"
   //logTrace "deviceInfo: ${deviceInfo}"
 
+  if (deviceInfo == null || deviceInfo.deviceType == null) {
+    log.warn "No device or type"
+    return
+  }
   if (DEVICE_TYPES[deviceInfo.deviceType] == null) {
     log.warn "Unsupported device type! ${deviceInfo.deviceType}"
     return
@@ -710,13 +772,32 @@ def sendUpdate(deviceInfo) {
   }
 }
 
+def sendPassthru(deviceInfo) {
+  logDebug "sendPassthru(deviceInfo)"
+  //logTrace "deviceInfo: ${deviceInfo}"
+
+  if (deviceInfo == null) {
+    log.warn "No data"
+  }
+  def d = getChildDevices()?.find {
+    it.deviceNetworkId == getFormattedDNI(deviceInfo.zid)
+  }
+  if (!d) {
+    log.warn "Couldn't find device ${deviceInfo.zid} for passthru"
+  }
+  else {
+    logDebug "Passthru for device ${d}"
+    d.setValues(deviceInfo)
+  }
+}
+
 private getMESSAGE_PREFIX() {
   return "42"
 }
 
 private getDEVICE_TYPES() {
   return [
-    //physical devices
+    //physical alarm devices
     "sensor.contact": [name: "Ring Virtual Contact Sensor", hidden: false],
     "sensor.motion": [name: "Ring Virtual Motion Sensor", hidden: false],
     "listener.smoke-co": [name: "Ring Virtual Alarm Smoke & CO Listener", hidden: false],
@@ -724,12 +805,20 @@ private getDEVICE_TYPES() {
     "lock": [name: "Ring Virtual Lock", hidden: false],
     "security-keypad": [name: "Ring Virtual Keypad", hidden: false],
     "base_station_v1": [name: "Ring Alarm Hub", hidden: false],
-    //virtual devices
+    //virtual alarm devices
     "adapter.zwave": [name: "Ring Z-Wave Adapter", hidden: true],
+    "adapter.zigbee": [name: "Ring Zigbee Adapter", hidden: true],
     "security-panel": [name: "Ring Alarm Security Panel", hidden: true],
     "hub.redsky": [name: "Ring Alarm Base Station", hidden: true],
     "access-code.vault": [name: "Code Vault", hidden: true],
-    "access-code": [name: "Access Code", hidden: true]
+    "access-code": [name: "Access Code", hidden: true],
+    //physical beams devices
+    "switch.multilevel.beams": [name: "Ring Virtual Beams Light", hidden: false],
+    "motion-sensor.beams": [name: "Ring Virtual Beams Motion Sensor", hidden: false],
+    "group.light-group.beams": [name: "Ring Virtual Beams Group", hidden: false],
+    "beams_bridge_v1": [name: "Ring Beams Bridge", hidden: false],
+    //virtual beams devices
+    "adapter.ringnet": [name: "Ring Beams Ringnet Adapter", hidden: true]
   ]
 }
 
@@ -744,5 +833,19 @@ def String getRingDeviceId(dni) {
 }
 
 def getChildByZID(zid) {
-  return getChildDevices()?.find { it.deviceNetworkId == getFormattedDNI(dni) }
+  logDebug "getChildByZID(${zid})"
+  def d = getChildDevices()?.find { it.deviceNetworkId == getFormattedDNI(zid) }
+  logTrace "Found child ${d}"
+  return d
 }
+
+def boolean isParentRequest(type) {
+  return ["refresh-security-device"].contains(type)
+}
+
+private getIGNORED_MSG_TYPES() {
+  return [
+    "SessionInfo"
+  ]
+}
+
