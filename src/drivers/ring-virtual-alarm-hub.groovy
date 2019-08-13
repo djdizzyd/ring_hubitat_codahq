@@ -191,7 +191,9 @@ private isMuted() {
 
 def setBrightness(brightness) {
   logDebug "Attempting to set brightness ${brightness}."
-  parent.simpleRequest("set-brightness-keypad", [dst: device.getDataValue("hub.redsky-zid"), brightness: brightness])
+  brightness = brightness > 100 ? 100 : brightness
+  brightness = brightness < 0 ? 0 : brightness
+  parent.simpleRequest("set-brightness-keypad", [dst: device.getDataValue("hub.redsky-zid"), brightness: brightness as Integer])
 }
 
 private getRING_TO_HSM_MODE_MAP() {
@@ -252,10 +254,13 @@ def setValues(deviceInfo) {
     sendLocationEvent(name: "hsmSetArm", value: "cancelAlerts")
   }
   if (deviceInfo.state?.volume != null) {
-    checkChanged("volume", deviceInfo.state.volume.toDouble() * 100)
+    checkChanged("volume", (deviceInfo.state.volume * 100) as Integer)
   }
   if (deviceInfo.batteryLevel) {
     checkChanged("battery", deviceInfo.batteryLevel)
+  }
+  if (deviceInfo.state?.brightness != null) {
+    checkChanged("brightness", (deviceInfo.state.brightness * 100) as Integer)
   }
   //TODO: check if there is really a tamper status on the hub or child components
   if (deviceInfo.tamperStatus) {
