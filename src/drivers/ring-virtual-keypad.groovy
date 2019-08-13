@@ -120,6 +120,8 @@ private isMuted() {
 
 def setBrightness(brightness) {
   logDebug "Attempting to set brightness ${brightness}."
+  brightness = brightness > 100 ? 100 : brightness
+  brightness = brightness < 0 ? 0 : brightness
   parent.simpleRequest("set-brightness-keypad", [dst: device.getDataValue("zid"), brightness: brightness])
 }
 
@@ -137,8 +139,7 @@ def setValues(deviceInfo) {
   logTrace "deviceInfo: ${deviceInfo}"
 
   if (deviceInfo.state && deviceInfo.state.volume != null) {
-    def volume = deviceInfo.state.volume.toDouble() * 100
-    checkChanged("volume", volume)
+    checkChanged("volume", (deviceInfo.state.volume * 100) as Integer)
   }
 
   //TODO: probably only when mode changes?
@@ -155,10 +156,8 @@ def setValues(deviceInfo) {
   //}
 
   if (deviceInfo.state && deviceInfo.state.brightness != null) {
-    def brightness = deviceInfo.state.brightness.toDouble() * 100
-    checkChanged("brightness", brightness)
+    checkChanged("brightness", (deviceInfo.state.brightness * 100) as Integer)
   }
-
   if (deviceInfo.batteryLevel) {
     checkChanged("battery", deviceInfo.batteryLevel)
   }
