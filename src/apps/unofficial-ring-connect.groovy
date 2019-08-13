@@ -66,6 +66,7 @@ def locations() {
     options["${key}"] = value
   }
   def numFound = options.size()
+  state.locationOptions = options
 
   dynamicPage(name: "locations", title: "Select which location you want to use", nextPage: "mainPage", uninstall: true) {
     section("Locations") {
@@ -76,25 +77,27 @@ def locations() {
 
 def mainPage() {
 
-  getNotifications()
-
-  def all = simpleRequest("locations")
+  //getNotifications()
 
   def locations = []
-  all.each {
-    location ->
-      if (selectedLocations.contains(location.location_id)) {
-        locations << location.name
-      }
+  state.locationOptions.each { location ->
+    if (selectedLocations.contains(location.key) || selectedLocations.equals(location.key)) {
+      locations << location.value
+    }
   }
 
   dynamicPage(name: "mainPage", title: "Manage Your Ring Devices", nextPage: null, uninstall: true, install: true) {
-    section("Ring Account Information    (<b>${authenticate() ? 'Successfully Logged In!' : 'Not Logged In. Please Configure!'}</b>)") {
+    section("Ring Account Information    (<b>${loggedIn() ? 'Successfully Logged In!' : 'Not Logged In. Please Configure!'}</b>)") {
       href "login", title: "Log into Your Ring Account", description: ""
     }
 
-    section("Configure Devices For Location:    <b>${locations.join(", ")}</b>") {
-      href "deviceDiscovery", title: "Discover Devices", description: ""
+    if (locations) {
+      section("Configure Devices For Location:    <b>${locations.join(", ")}</b>") {
+        href "deviceDiscovery", title: "Discover Devices", description: ""
+      }
+    }
+    else {
+      section("<b>Log in again to pick a location before proceeding!!</b>") {}
     }
 
     section("Installed Devices") {
@@ -425,104 +428,168 @@ private getRequests(parts) {
   //logTrace "getRequest(parts)"
   //logTrace "parts: ${parts} ${parts.dni}"
   return [
-    "refresh": [
-      method: GET
-      , params: [
-      uri: "https://api.ring.com"
-      , path: "/clients_api/ring_devices"
-      , contentType: JSON
-    ]
+
+    "auth": [
+      method: POST,
+      synchronous: true,
+      params: [
+        uri: "https://oauth.ring.com",
+        path: "/oauth/token",
+        //requestContentType: "application/json",
+        contentType: "application/json",
+        body: [
+          "client_id": "ring_official_android",
+          "grant_type": "password",
+          "password": "${password}",
+          "scope": "client",
+          "username": "${username}"
+        ]
+      ],
+      headers: [
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36"
+      ]
+    ],
+    "session": [
+      method: POST,
+      synchronous: true,
+      type: "bearer",
+      params: [
+        uri: "https://api.ring.com",
+        path: "/clients_api/session",
+        requestContentType: "application/json",
+        contentType: "application/json",
+        body: [
+          device: [
+            "hardware_id": state.appDeviceId,
+            "metadata": [api_version: 9],
+            "os": "android"
+          ]
+        ]
+      ],
+      headers: [
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36"
+      ]
+    ],
+    "locations": [
+      method: GET,
+      synchronous: true,
+      type: "bearer",
+      params: [
+        uri: "https://app.ring.com",
+        path: "/rhq/v1/devices/v1/locations",
+        contentType: JSON/*"${JSON}, ${TEXT}, ${ALL}"*/
+      ]
     ],
     "devices": [
-      method: GET
-      , params: [
-      uri: "https://api.ring.com"
-      , path: "/clients_api/ring_devices"
-      , contentType: JSON
-    ]
+      method: GET,
+      synchronous: true,
+      type: "token",
+      params: [
+        uri: "https://api.ring.com",
+        path: "/clients_api/ring_devices" + (parts.dni ? "/${getRingDeviceId(parts.dni)}" : ""),
+        contentType: JSON
+      ]
     ],
+    "refresh": [
+      method: GET,
+      synchronous: false,
+      type: "token",
+      params: [
+        uri: "https://api.ring.com",
+        path: "/clients_api/ring_devices" + (parts.dni ? "/${getRingDeviceId(parts.dni)}" : ""),
+        contentType: JSON
+      ]
+    ],
+    "device-control": [
+      method: POST,
+      type: "token",
+      params: [
+        uri: "https://api.ring.com",
+        path: "/clients_api/${parts.kind}/${getRingDeviceId(parts.dni)}/${parts.action}",
+        contentType: TEXT,
+        requestContentType: JSON,
+        body: parts.body
+      ]
+    ],
+    "device-set": [
+      method: PUT,
+      type: "token",
+      params: [
+        uri: "https://api.ring.com",
+        path: "/clients_api/${parts.kind}/${getRingDeviceId(parts.dni)}" + "${parts.action ? "/${parts.action}" : ""}",
+        contentType: TEXT,
+        requestContentType: JSON,
+        body: parts.body
+      ]
+    ],
+    "tickets": [
+      method: GET
+      , type: "bearer"
+      , params: [
+      uri: "https://app.ring.com"
+      , path: "/api/v1/clap/tickets"
+      , contentType: JSON
+      , requestContentType: TEXT
+      //,textParser: true
+    ]
+      , query: ["locationID": "${selectedLocations}"]
+    ],
+
+
+
+    /*
+"refresh": [
+method: GET,
+params: [
+uri: "https://api.ring.com",
+path: "/clients_api/ring_devices",
+contentType: JSON
+]
+],
+"devices": [
+method: GET
+, params: [
+uri: "https://api.ring.com"
+, path: "/clients_api/ring_devices"
+, contentType: JSON
+]
+],
+
+
     "light-on": [
       method: PUT
       , params: [
-      uri: "https://api.ring.com"
-      , path: "/clients_api/doorbots/${getRingDeviceId(parts.dni)}/floodlight_light_on"
-      , contentType: TEXT
-    ]
+        uri: "https://api.ring.com"
+        , path: "/clients_api/doorbots/${getRingDeviceId(parts.dni)}/floodlight_light_on"
+        , contentType: TEXT
+      ]
     ],
     "light-off": [
       method: PUT
       , params: [
-      uri: "https://api.ring.com"
-      , path: "/clients_api/doorbots/${getRingDeviceId(parts.dni)}/floodlight_light_off"
-      , contentType: TEXT
-    ]
+        uri: "https://api.ring.com"
+        , path: "/clients_api/doorbots/${getRingDeviceId(parts.dni)}/floodlight_light_off"
+        , contentType: TEXT
+      ]
     ],
     "siren-on": [
       method: PUT
       , params: [
-      uri: "https://api.ring.com"
-      , path: "/clients_api/doorbots/${getRingDeviceId(parts.dni)}/siren_on"
-      , contentType: JSON
-    ]
+        uri: "https://api.ring.com"
+        , path: "/clients_api/doorbots/${getRingDeviceId(parts.dni)}/siren_on"
+        , contentType: JSON
+      ]
     ],
     "siren-off": [
       method: PUT
       , params: [
-      uri: "https://api.ring.com"
-      , path: "/clients_api/doorbots/${getRingDeviceId(parts.dni)}/siren_off"
-      , contentType: TEXT
-    ]
+        uri: "https://api.ring.com"
+        , path: "/clients_api/doorbots/${getRingDeviceId(parts.dni)}/siren_off"
+        , contentType: TEXT
+      ]
     ],
-    "chime-motion": [
-      method: POST
-      , params: [
-      uri: "https://api.ring.com"
-      , path: "/clients_api/chimes/${getRingDeviceId(parts.dni)}/play_sound"
-      , contentType: TEXT
-      , requestContentType: JSON
-      , body: [kind: "motion"]
-    ]
-    ],
-    "chime-ding": [
-      method: POST
-      , params: [
-      uri: "https://api.ring.com"
-      , path: "/clients_api/chimes/${getRingDeviceId(parts.dni)}/play_sound"
-      , contentType: TEXT
-      , requestContentType: JSON
-      , body: [kind: "ding"]
-    ]
-    ],
-    "chime-volume": [
-      method: PUT
-      , params: [
-      uri: "https://api.ring.com"
-      , path: "/clients_api/chimes/${getRingDeviceId(parts.dni)}"
-      , contentType: TEXT
-      , requestContentType: JSON
-      , body: [chime: [settings: [volume: parts.volume]]]
-    ]
-    ],
-    "chime-mute": [
-      method: PUT
-      , params: [
-      uri: "https://api.ring.com"
-      , path: "/clients_api/chimes/${getRingDeviceId(parts.dni)}"
-      , contentType: TEXT
-      , requestContentType: JSON
-      , body: [chime: [settings: [volume: 0]]]
-    ]
-    ],
-    "chime-unmute": [
-      method: PUT
-      , params: [
-      uri: "https://api.ring.com"
-      , path: "/clients_api/chimes/${getRingDeviceId(parts.dni)}"
-      , contentType: TEXT
-      , requestContentType: JSON
-      , body: [chime: [settings: [volume: parts.volume]]]
-    ]
-    ],
+*/
+
     "refresh-device": [
       method: GET
       , params: [
@@ -547,38 +614,18 @@ private getRequests(parts) {
       , contentType: JSON
     ]
     ],
-    "locations": [
-      method: GET
-      , type: "bearer"
-      , params: [
-      uri: "https://app.ring.com"
-      , path: "/rhq/v1/devices/v1/locations"
-      , contentType: JSON/*"${JSON}, ${TEXT}, ${ALL}"*/
-    ]
-    ],
     "ws-connect": [
-      method: POST
-      , type: "bearer"
-      , params: [
-      uri: "https://app.ring.com"
-      , path: "/api/v1/rs/connections?accountId=${selectedLocations}"
-    ]
-      , headers: [
-      'Content-Type': "application/x-www-form-urlencoded"
-    ]
+      method: POST,
+      type: "bearer",
+      params: [
+        uri: "https://app.ring.com",
+        path: "/api/v1/rs/connections?accountId=${selectedLocations}"
+      ],
+      headers: [
+        'Content-Type': "application/x-www-form-urlencoded"
+      ]
     ],
-    "tickets": [
-      method: GET
-      , type: "bearer"
-      , params: [
-      uri: "https://app.ring.com"
-      , path: "/api/v1/clap/tickets"
-      , contentType: JSON
-      , requestContentType: TEXT
-      //,textParser: true
-    ]
-      , query: ["locationID": "${selectedLocations}"]
-    ],
+
     "subscribe": [
       method: PUT
       , type: "bearer"
@@ -611,183 +658,253 @@ static standardHeaders = [
   //,'User-Agent': "Dalvik/2.1.0 (Linux; U; Android 6.0.1; Nexus 7 Build/MOB30X)"
   , 'accept-encoding': 'gzip, deflate'
   , 'Connection': 'keep-alive'
-  , 'Accept': '*/*'
+  //, 'Accept': '*/*'
 ]
 
-def simpleRequest(type, data = [:]) {
-  logDebug "simpleRequest(${type})"
-  logTrace "data: ${data}"
-  def auth_token = authenticate()
-  logTrace "auth token: ${auth_token}"
-  logTrace "bearer token: ${state.access_token}"
 
-  if (!auth_token) {
-    log.error "User is not authenticated.  Please check your username and password and try again!"
-    return
-  }
 
-  def request = getRequests(data).getAt(type)
-  logTrace "request: ${request}"
-
-  def params = request.params
-  def query = [:]
-  def headers = [
-    'Host': "${request.params.uri.replace('https://', '')}"
-  ]
-  headers.properties.each { log.warn it }
-  standardHeaders.properties.each { log.warn it }
-  headers << standardHeaders
-
-  if (request.type == "bearer") {
-    headers << ['Authorization': "Bearer ${state.access_token}"]
-  }
-  else {
-    query << [api_version: 9, auth_token: auth_token]
-  }
-
-  if (request.headers) {
-    headers << request.headers
-  }
-  params << [headers: headers]
-
-  if (request.query) {
-    query << request.query
-  }
-  params << [query: query]
-
-  logTrace "params: ${params}"
-
-  if (type == "subscribe") return
-
-  try {
-
-    "${request.method}"(params) { resp ->
-      logTrace "Success handler"
-
-      def body = resp.data
-      if (type == "refresh") {
-        logTrace "refeshing from ${body.stickup_cams.size()} cams"
-
-        body.stickup_cams.each {
-          def device = getChildDevice(getFormattedDNI(it.id.toString()))
-          if (device) {
-            device.childParse(type, [msg: it])
-          }
-        }
-      }
-      else if (type == "light-on" || type == "light-off" || type == "siren-off") {
-        logTrace "resp ${resp}"
-        getChildDevice(data.dni).childParse(type, [response: resp.getStatus()])
-      }
-      else if (type == "devices") {
-        //logTrace "resp ${JsonOutput.toJson(body)}"
-
-        body.chimes.each { body.stickup_cams << it }
-        body.base_stations.each { body.stickup_cams << it }
-        body.beams_bridges.each { body.stickup_cams << it }
-        return body.stickup_cams
-      }
-      else if (type == "chime-motion" || type == "chime-ding" || type == "chime-volume" || type == "chime-mute" || type == "chime-unmute") {
-        logTrace "resp ${resp}"
-        getChildDevice(data.dni).childParse(type, [response: resp.getStatus(), volume: data.volume])
-      }
-      else if (type == "refresh-device" || type == "siren-on") {
-        logTrace "body ${body}"
-        getChildDevice(data.dni).childParse(type, [response: resp.getStatus(), msg: body])
-      }
-      else if (type == "locations") {
-        return body.user_locations
-      }
-      else if (type == "ws-connect" || type == "tickets") {
-        //initWebsocket(body, getChildDevice(data.dni))
-        logTrace "resp.data: $resp.data"
-        getChildDevice(data.dni).childParse(type, [response: resp.getStatus(), msg: body])
-      }
-      else if (type == "master-key") {
-        getChildDevice(data.dni).childParse(type, [response: resp.getStatus(), msg: body, code: data.code, name: data.name])
-      }
-
-    }
-  }
-  catch (Exception ex) {
-    log.warn "exception: ${ex} cause: ${ex.getCause()} status code: ${ex.getStatusCode()} response: ${ex.getResponse()}"
-    if (ex.getStatusCode() == 401) {
-      state.access_token = "EMPTY"
-      state.authentication_token = "EMPTY"
-      simpleRequest(type, data)
-    }
-  }
-}
-
-def initWebsocket(json, device) {
-  logDebug "initWebsocket(json)"
-  logTrace "ws-connect body ${json}"
-  //logTrace "app ${app}"
-  //logTrace "device ${getChildDevice(params.dni)}"
-
-  try {
-    InterfaceUtils.webSocketConnect(device, "wss://${json.server}/?authcode=${json.authCode}&ack=false&EIO=3&transport=websocket")
-  }
-  catch (e) {
-    if (logEnable) log.debug "initialize error: ${e.message}"
-    log.error "WebSocket connect failed"
-  }
-}
-
-def sendMsg(String s) {
-  InterfaceUtils.sendWebSocketMessage(device, s)
-}
-
-def webSocketStatus(String status) {
-  log.debug "webSocketStatus- ${status}"
-
-  if (status.startsWith('failure: ')) {
-    log.warn("failure message from web socket ${status}")
-    reconnectWebSocket()
-  }
-  else if (status == 'status: open') {
-    log.info "websocket is open"
-    // success! reset reconnect delay
-    pauseExecution(1000)
-    state.reconnectDelay = 1
-  }
-  else if (status == "status: closing") {
-    log.warn "WebSocket connection closing."
-  }
-  else {
-    log.warn "WebSocket error, reconnecting."
-    reconnectWebSocket()
-  }
-}
-
-def reconnectWebSocket() {
-  // first delay is 2 seconds, doubles every time
-  state.reconnectDelay = (state.reconnectDelay ?: 1) * 2
-  // don't let delay get too crazy, max it out at 10 minutes
-  if (state.reconnectDelay > 600) state.reconnectDelay = 600
-
-  //If the socket is unavailable, give it some time before trying to reconnect
-  runIn(state.reconnectDelay, initialize)
-}
 
 def parse(String description) {
   logDebug "parse(String description)"
   logTrace "description: $description"
+  log.error "Parse?"
 }
 
 def authenticate() {
   if (!state.appDeviceId) {
     generateAppDeviceId()
   }
-  def token = getTokens()
-  if (!token) {
-    state.access_token = "EMPTY"
-    state.authentication_token = "EMPTY"
-  }
-  return getTokens()
+  simpleRequest("auth")
+  simpleRequest("session")
+  return state.authentication_token
 }
 
+def simpleRequest(type, data = [:]) {
+  logDebug "simpleRequest(${type})"
+  logTrace "data: ${data}"
 
+  def request = getRequests(data).getAt(type)
+  logTrace "request: ${request}"
+
+  def params = formatParams(request, type, data)
+
+  //actions that aren't ready can abort here
+  if (type == "subscribe") return
+
+  if (request.synchronous) {
+    return doSynchronousAction(request.method, type, params)
+  }
+  else {
+    doAction(request.method, type, params, data)
+  }
+}
+
+def formatParams(request, type, data) {
+  logDebug "formatParams(request, type, data)"
+  def params = request.params
+  def query = [:]
+  def headers = [
+    'Host': "${request.params.uri.replace('https://', '')}"
+  ]
+  headers << standardHeaders
+  if (request.type == "bearer") {
+    headers << ['Authorization': "Bearer ${state.access_token}"]
+  }
+  else if (request.type == "token") {
+    query << [api_version: 9, auth_token: state.authentication_token]
+  }
+  if (request.headers) {
+    headers << request.headers
+  }
+  params << [headers: headers]
+  if (request.query) {
+    query << request.query
+  }
+  if (query) {
+    params << [query: query]
+  }
+  logTrace "params: ${JsonOutput.prettyPrint(JsonOutput.toJson(params))}"
+  return params
+}
+
+def doAction(type, method, params, data) {
+  logDebug "doAction(type, method, params, data)"
+  try {
+    "async${type}"("responseHandler", params, [method: method, data: data])
+  }
+  catch (e) {
+    log.error "HTTP Exception received on ${type}: ${e}"
+  }
+}
+
+def doSynchronousAction(type, method, params) {
+  logDebug "doSynchronousAction($type, $method, params)"
+  def retval
+  try {
+    "${type}"(params) { response ->
+      retval = responseHandler(response, [method: method])
+    }
+  }
+  catch (ex) {
+    logTrace "ex: ${ex}"
+    if (ex instanceof groovyx.net.http.HttpResponseException && ex.getStatusCode() == 401 && !(method in ["auth", "session"])) {
+      logInfo "Not authenticated!"
+      state.access_token = "EMPTY"
+      state.authentication_token = "EMPTY"
+      if (authenticate()) {
+        return simpleRequest(method)
+      }
+    }
+    else if (method == "auth") {
+      log.warn "Username and password incorrect!"
+    }
+    else if (method == "session") {
+      log.warn "What goes on here?"
+    }
+    else {
+      log.warn "HTTP Exception received on ${type}"
+      log.warn "exception: ${ex} cause: ${ex.getCause()}"
+    }
+  }
+  return retval
+}
+
+/*
+def doAuth(previousMethod) {
+  logDebug "doAuth()"
+
+  if (state.access_token) state.access_token = "EMPTY"
+  if (state.access_token == "EMPTY") {
+    def params = [
+      uri: "https://oauth.ring.com",
+      path: "/oauth/token",
+      headers: [
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36"
+      ],
+      requestContentType: "application/json",
+      contentType: "application/json",
+      body: [
+        "client_id": "ring_official_android",
+        "grant_type": "password",
+        "password": "${password}",
+        "scope": "client",
+        "username": "${username}"
+      ]
+    ]
+
+    doAction("asynchttpPost", "auth", params, previousMethod)
+
+  }
+}
+*/
+
+/*
+def doSession(previousMethod) {
+  logDebug "doSession()"
+
+  if (state.authentication_token) state.authentication_token = "EMPTY"
+  if (state.authentication_token == "EMPTY") {
+    def params = [
+      uri: "https://api.ring.com",
+      path: "/clients_api/session",
+      headers: [
+        Authorization: "Bearer ${state.access_token}",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36"
+      ],
+      requestContentType: "application/json",
+      contentType: "application/json",
+      body: [
+        device: [
+          "hardware_id": state.appDeviceId,
+          "metadata": [api_version: 9],
+          "os": "android"
+        ]
+      ]
+    ]
+
+    doAction("asynchttpPost", "session", params, previousMethod)
+
+  }
+}
+*/
+
+def responseHandler(response, params) {
+  logDebug "responseHandler(${response.status}, ${params})"
+  if (response.status == 401) {
+    logInfo "Not authenticated!"
+    state.access_token = "EMPTY"
+    state.authentication_token = "EMPTY"
+    if (authenticate()) {
+      simpleRequest(params.method, params.data)
+    }
+  }
+  else {
+    //this would be a switch but they just don't format well in the editor
+    if (params.method == "auth") {
+      state.access_token = response.data.access_token
+      state.refresh_token = response.data.refresh_token
+      logDebug "access token: ${state.access_token}"
+      return state.access_token && state.access_token != "EMPTY"
+    }
+    else if (params.method == "session") {
+      state.authentication_token = response?.data?.profile.authentication_token
+      logDebug "Authenticated, Token Found."
+      return state.authentication_token && state.authentication_token != "EMPTY"
+    }
+    else if (params.method == "locations") {
+      return response.data.user_locations
+    }
+    else if (params.method == "devices") {
+      def body = response.data
+      body.chimes.each { body.stickup_cams << it }
+      body.base_stations.each { body.stickup_cams << it }
+      body.beams_bridges.each { body.stickup_cams << it }
+      return body.stickup_cams
+    }
+    else if (params.method == "refresh") {
+      def body = response.getJson()
+      if (body.id) {
+        body = [body]
+      }
+      logTrace "body: ${JsonOutput.prettyPrint(JsonOutput.toJson(body))}"
+      body.each { deviceInfo ->
+        logTrace "deviceInfo: ${deviceInfo}"
+        logDebug "refreshing device ${getFormattedDNI(deviceInfo.id)}"
+        getChildDevice(getFormattedDNI(deviceInfo.id))?.childParse(params.method, [response: response.getStatus(), msg: deviceInfo])
+      }
+    }
+    else if (params.method == "device-control" || params.method == "device-set" || params.method == "tickets") {
+      def body = response.data ? response.getJson() : null
+      logTrace "body: $body"
+      getChildDevice(params.data.dni).childParse(params.method, [
+        response: response.getStatus(),
+        action: params.data.action,
+        kind: params.data.body?.kind,
+        volume: params.data.body?.chime?.settings?.volume,
+        msg: body
+      ])
+    }
+    //else if (params.method == "tickets") {
+    //  getChildDevice(data.dni).childParse(type, [response: resp.getStatus(), msg: body])
+    //}
+    else {
+      log.error "Unhandled method!"
+      response.properties.each {log.warn it}
+      if (response.data) {
+        log.error "Data: ${response.data}"
+      }
+      throw new java.lang.UnsupportedOperationException("${params.method} is not implemented!")
+    }
+  }
+
+
+}
+
+def loggedIn() {
+  return state.authentication_token && state.authentication_token != "EMPTY"
+}
+
+/*
 def getTokens() {
   def s = "${username}:${password}"
   String encodedUandP = s.bytes.encodeBase64()
@@ -860,6 +977,7 @@ def getTokens() {
   }
   return state.authentication_token
 }
+*/
 
 //logging help methods
 private logInfo(msg) {
