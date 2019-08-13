@@ -80,13 +80,13 @@ def poll() {
 
 def refresh() {
   logDebug "refresh()"
-  parent.simpleRequest("refresh-device", [dni: device.deviceNetworkId])
+  parent.simpleRequest("refresh", [dni: device.deviceNetworkId])
 }
 
 def on() {
   state.strobing = false
   logDebug "Attempting to switch on."
-  parent.simpleRequest("light-on", [dni: device.deviceNetworkId])
+  parent.simpleRequest("device-set", [dni: device.deviceNetworkId, kind: "doorbots", action: "floodlight_light_on"])
 }
 
 def off(boolean modifyAlarm = true) {
@@ -102,7 +102,7 @@ def switchOff() {
   }
   state.strobing = false
   logDebug "Attempting to set switch to off."
-  parent.simpleRequest("light-off", [dni: device.deviceNetworkId])
+  parent.simpleRequest("device-set", [dni: device.deviceNetworkId, kind: "doorbots", action: "floodlight_light_off"])
 }
 
 def alarmOff(boolean modifyLight = true) {
@@ -114,13 +114,13 @@ def alarmOff(boolean modifyLight = true) {
     switchOff()
   }
   if (alarm == "siren" || alarm == "both") {
-    parent.simpleRequest("siren-off", [dni: device.deviceNetworkId])
+    parent.simpleRequest("device-set", [dni: device.deviceNetworkId, kind: "doorbots", action: "siren_off"])
   }
 }
 
 def siren() {
   logDebug "Attempting to turn on siren."
-  parent.simpleRequest("siren-on", [dni: device.deviceNetworkId])
+  parent.simpleRequest("device-set", [dni: device.deviceNetworkId, kind: "doorbots", action: "siren_on"])
 }
 
 def strobe(value = "strobe") {
@@ -140,13 +140,13 @@ def both() {
 def strobeOn() {
   if (!state.strobing) return
   runInMillis(strobeRate.toInteger(), strobeOff)
-  parent.simpleRequest("light-on", [dni: device.deviceNetworkId])
+  parent.simpleRequest("device-set", [dni: device.deviceNetworkId, kind: "doorbots", action: "floodlight_light_on"])
 }
 
 def strobeOff() {
   if (!state.strobing) return
   runInMillis(strobeRate.toInteger(), strobeOn)
-  parent.simpleRequest("light-off", [dni: device.deviceNetworkId])
+  parent.simpleRequest("device-set", [dni: device.deviceNetworkId, kind: "doorbots", action: "floodlight_light_off"])
 }
 
 def childParse(type, params) {
@@ -154,17 +154,13 @@ def childParse(type, params) {
   logTrace "type ${type}"
   logTrace "params ${params}"
 
-  if (type == "refresh-device") {
+  if (type == "refresh") {
     logTrace "refresh"
     handleRefresh(params.msg)
   }
-  else if (type == "light-on" || type == "light-off") {
-    logTrace "switch"
-    handleSwitch(type, params.response)
-  }
-  else if (type == "siren-on" || type == "siren-off") {
-    logTrace "siren"
-    handleSiren(type, params.response, params.msg)
+  else if (type == "device-set") {
+    logTrace "set"
+    handleSet(type, params)
   }
   else {
     log.error "Unhandled type ${type}"
@@ -177,39 +173,55 @@ private handleRefresh(json) {
     log.warn "No status?"
     return
   }
-  logInfo "Switch for device ${device.label} is ${json.led_status}"
-  sendEvent(name: "switch", value: json.led_status)
-  def value = json.siren_status.seconds_remaining > 0 ? "siren" : "off"
-  logInfo "Alarm for device ${device.label} is ${value}"
-  sendEvent(name: "alarm", value: value)
-  if (value == "siren") {
-    runIn(json.siren_status.seconds_remaining + 1, refresh)
+
+  if (json.led_status) {
+    checkChanged("switch", json.led_status)
+  }
+
+  if (json.siren_status?.seconds_remaining && json.siren_status.seconds_remaining > 0) {
+    def value = json.siren_status.seconds_remaining > 0 ? "siren" : "off"
+    checkChanged("alarm", value)
+    if (value == "siren") {
+      runIn(json.siren_status.seconds_remaining + 1, refresh)
+    }
   }
 }
 
-private handleSwitch(id, result) {
-  logTrace "handleSwitch(${id}, ${result})"
-  if (result != 200) {
+private handleSet(id, params) {
+  logTrace "handleSet(${id}, ${params})"
+  if (params.response != 200) {
     log.warn "Not successful?"
     return
   }
-  logInfo "Device ${device.label} is ${id.split("-")[1]}"
-  sendEvent(name: "switch", value: id.split("-")[1])
+  if (params.action == "floodlight_light_on") {
+    logInfo "Device ${device.label} switch is on"
+    sendEvent(name: "switch", value: "on")
+  }
+  else if (params.action == "floodlight_light_off") {
+    logInfo "Device ${device.label} switch is off"
+    sendEvent(name: "switch", value: "off")
+  }
+  else if (params.action == "siren_on") {
+    def value = device.currentValue("alarm") == "both" ? "both" : "siren"
+    if (value != "both") {
+      logInfo "Device ${device.label} alarm is ${value}"
+      sendEvent(name: "alarm", value: value)
+    }
+    runIn(params.msg.seconds_remaining + 1, refresh)
+  }
+  else if (params.action == "siren_off") {
+    logInfo "Device ${device.label} alarm is off"
+    sendEvent(name: "alarm", value: "off")
+  }
+  else {
+    log.error "Unsupported set ${params.action}"
+  }
+
 }
 
-private handleSiren(id, result, json) {
-  logTrace "handleSiren(${id}, ${result}, json)"
-  logTrace "json: ${json}"
-  if (result != 200) {
-    log.warn "Not successful?"
-    return
-  }
-  def value = id == "siren-on" ? (device.currentValue("alarm") == "both" ? "both" : "siren") : "off"
-  logInfo "Alarm for device ${device.label} is ${value}"
-  if (id == "siren-on") {
-    runIn(json.seconds_remaining + 1, refresh)
-  }
-  if (value != "both") {
-    sendEvent(name: "alarm", value: value)
+def checkChanged(attribute, newStatus) {
+  if (device.currentValue(attribute) != newStatus) {
+    logInfo "${attribute.capitalize()} for device ${device.label} is ${newStatus}"
+    sendEvent(name: attribute, value: newStatus)
   }
 }
