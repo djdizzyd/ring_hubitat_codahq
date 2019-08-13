@@ -75,17 +75,17 @@ def poll() {
 
 def refresh() {
   logDebug "refresh()"
-  parent.simpleRequest("refresh-device", [dni: device.deviceNetworkId])
+  parent.simpleRequest("refresh", [dni: device.deviceNetworkId])
 }
 
 def on() {
   logDebug "Attempting to switch on."
-  parent.simpleRequest("light-on", [dni: device.deviceNetworkId])
+  parent.simpleRequest("device-set", [dni: device.deviceNetworkId, kind: "doorbots", action: "floodlight_light_on"])
 }
 
 def off() {
   logDebug "Attempting to switch off."
-  parent.simpleRequest("light-off", [dni: device.deviceNetworkId])
+  parent.simpleRequest("device-set", [dni: device.deviceNetworkId, kind: "doorbots", action: "floodlight_light_off"])
 }
 
 def childParse(type, params) {
@@ -93,13 +93,13 @@ def childParse(type, params) {
   logTrace "type ${type}"
   logTrace "params ${params}"
 
-  if (type == "refresh-device") {
+  if (type == "refresh") {
     logTrace "refresh"
     handleRefresh(params.msg)
   }
-  else if (type == "light-on" || type == "light-off") {
-    logTrace "switch"
-    handleSwitch(type, params.response)
+  else if (type == "device-set") {
+    logTrace "set"
+    handleSet(type, params)
   }
   else {
     log.error "Unhandled type ${type}"
@@ -112,16 +112,37 @@ private handleRefresh(json) {
     log.warn "No status?"
     return
   }
-  logInfo "Device ${device.label} is ${json.led_status}"
-  sendEvent(name: "switch", value: json.led_status)
+
+  if (json.led_status.seconds_remaining != null) {
+    checkChanged("switch", json.led_status.seconds_remaining > 0 ? "on" : "off")
+  }
+  else if (json.led_status) {
+    checkChanged("switch", json.led_status)
+  }
 }
 
-private handleSwitch(id, result) {
-  logTrace "handleSwitch(${id}, ${result})"
-  if (result != 200) {
+private handleSet(id, params) {
+  logTrace "handleSet(${id}, ${params})"
+  if (params.response != 200) {
     log.warn "Not successful?"
     return
   }
-  logInfo "Device ${device.label} is ${id.split("-")[1]}"
-  sendEvent(name: "switch", value: id.split("-")[1])
+  if (params.action == "floodlight_light_on") {
+    logInfo "Device ${device.label} switch is on"
+    sendEvent(name: "switch", value: "on")
+  }
+  else if (params.action == "floodlight_light_off") {
+    logInfo "Device ${device.label} switch is off"
+    sendEvent(name: "switch", value: "off")
+  }
+  else {
+    log.error "Unsupported set ${params.action}"
+  }
+}
+
+def checkChanged(attribute, newStatus) {
+  if (device.currentValue(attribute) != newStatus) {
+    logInfo "${attribute.capitalize()} for device ${device.label} is ${newStatus}"
+    sendEvent(name: attribute, value: newStatus)
+  }
 }
