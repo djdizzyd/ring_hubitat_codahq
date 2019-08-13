@@ -68,23 +68,17 @@ def poll() {
 
 def refresh() {
   logDebug "Attempting to refresh."
-  parent.simpleRequest("refresh-device", [dni: device.deviceNetworkId])
+  parent.simpleRequest("refresh", [dni: device.deviceNetworkId])
 }
 
 def beep() {
-  logDebug "Attempting to beep."
-  if (!isMuted()) {
-    parent.simpleRequest("chime-motion", [dni: device.deviceNetworkId])
-  }
-  else {
-    logInfo "No beep because muted"
-  }
+  playMotion()
 }
 
 def playMotion() {
   logDebug "Attempting to play motion."
   if (!isMuted()) {
-    parent.simpleRequest("chime-motion", [dni: device.deviceNetworkId])
+    parent.simpleRequest("device-control", [dni: device.deviceNetworkId, kind: "chimes", action: "play_sound", body: [kind: "motion"]])
   }
   else {
     logInfo "No motion because muted"
@@ -94,7 +88,7 @@ def playMotion() {
 def playDing() {
   logDebug "Attempting to play ding."
   if (!isMuted()) {
-    parent.simpleRequest("chime-ding", [dni: device.deviceNetworkId])
+    parent.simpleRequest("device-control", [dni: device.deviceNetworkId, kind: "chimes", action: "play_sound", body: [kind: "ding"]])
   }
   else {
     logInfo "No ding because muted"
@@ -105,7 +99,11 @@ def mute() {
   logDebug "Attempting to mute."
   if (!isMuted()) {
     state.prevVolume = device.currentValue("volume")
-    parent.simpleRequest("chime-mute", [dni: device.deviceNetworkId])
+    parent.simpleRequest("device-set", [
+      dni: device.deviceNetworkId,
+      kind: "chimes",
+      body: [chime: [settings: [volume: 0]]]
+    ])
   }
   else {
     logInfo "Already muted."
@@ -116,7 +114,11 @@ def mute() {
 def unmute() {
   logDebug "Attempting to unmute."
   if (isMuted()) {
-    parent.simpleRequest("chime-unmute", [dni: device.deviceNetworkId, volume: (state.prevVolume / 10 as Integer)])
+    parent.simpleRequest("device-set", [
+      dni: device.deviceNetworkId,
+      kind: "chimes",
+      body: [chime: [settings: [volume: (state.prevVolume / 10 as Integer)]]]
+    ])
   }
   else {
     logInfo "Already unmuted."
@@ -127,7 +129,11 @@ def unmute() {
 def setVolume(volumelevel) {
   logDebug "Attempting to set volume."
   if (device.currentValue("volume") != volumelevel) {
-    parent.simpleRequest("chime-volume", [dni: device.deviceNetworkId, volume: (volumelevel / 10 as Integer)])
+    parent.simpleRequest("device-set", [
+      dni: device.deviceNetworkId,
+      kind: "chimes",
+      body: [chime: [settings: [volume: (volumelevel / 10 as Integer)]]]
+    ])
   }
   else {
     logInfo "Already at volume."
@@ -189,15 +195,17 @@ def childParse(type, params = []) {
   logTrace "type ${type}"
   logTrace "params ${params}"
 
-  if (type == "refresh-device") {
+  state.lastUpdate = now()
+
+  if (type == "refresh") {
     logTrace "refresh"
     handleRefresh(params.msg)
   }
-  else if (type == "chime-motion" || type == "chime-ding") {
-    logTrace "beep"
-    handleBeep(type, params.response)
+  else if (type == "device-control") {
+    logTrace "device-control"
+    handleBeep(type, params)
   }
-  else if (type == "chime-volume" || type == "chime-mute" || type == "chime-unmute") {
+  else if (type == "device-set") {
     logTrace "volume"
     handleVolume(type, params)
   }
@@ -206,13 +214,15 @@ def childParse(type, params = []) {
   }
 }
 
-private handleBeep(id, result) {
-  logTrace "handleBeep(${id}, ${result})"
-  if (result != 204) {
+private handleBeep(id, params) {
+  logTrace "handleBeep(${id}, ${params.response})"
+  if (params.response != 204) {
     log.warn "Not successful?"
     return
   }
-  logInfo "Device ${device.label} played ${id.split("-")[1]}"
+  if (params.action == "play_sound") {
+    logInfo "Device ${device.label} played ${params.kind}"
+  }
 }
 
 private handleVolume(id, params) {
@@ -221,17 +231,17 @@ private handleVolume(id, params) {
     log.warn "Not successful?"
     return
   }
-  if (id == "chime-mute") {
+
+  sendEvent(name: "volume", value: (params.volume as Integer) * 10)
+  logInfo "Device ${device.label} volume set to ${(params.volume as Integer) * 10}"
+
+  if (params.volume == 0 && device.currentValue("mute") != "muted") {
     sendEvent(name: "mute", value: "muted")
     logInfo "Device ${device.label} set to muted"
   }
-  else if (id == "chime-unmute") {
+  if (params.volume != 0 && device.currentValue("mute") == "muted") {
     sendEvent(name: "mute", value: "unmuted")
     logInfo "Device ${device.label} set to unmuted"
-  }
-  else {
-    sendEvent(name: "volume", value: (params.volume as Integer) * 10)
-    logInfo "Device ${device.label} volume set to ${params.volume}"
   }
 }
 
@@ -254,6 +264,14 @@ private handleRefresh(json) {
     state.prevVolume = 50
     logInfo "No previous volume found so arbitrary value given"
   }
+
+  if (json.firmware_version && device.getDataValue("firmware") != json.firmware_version) {
+    device.updateDataValue("firmware", json.firmware_version)
+  }
+  if (json.kind && device.getDataValue("kind") != json.kind) {
+    device.updateDataValue("kind", json.kind)
+  }
+
 }
 
 private isMuted() {
