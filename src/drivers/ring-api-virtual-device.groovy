@@ -35,7 +35,7 @@ metadata {
   }
 
   preferences {
-    input name: "pollingInterval", type: "number", range: 8..48, title: "Polling Interval", description: "Duration in hours between polls", defaultValue: 24, required: true
+    input name: "watchDogInterval", type: "number", range: 10..1440, title: "Watchdog Interval", description: "Duration in minutes between checks", defaultValue: 60, required: true
     input name: "descriptionTextEnable", type: "bool", title: "Enable descriptionText logging", defaultValue: true
     input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
     input name: "traceLogEnable", type: "bool", title: "Enable trace logging", defaultValue: true
@@ -112,22 +112,24 @@ def refresh(zid) {
       simpleRequest("refresh", [dst: hub.zid])
     }
   }
-  customPolling()
+  watchDogChecking()
 }
 
-def customPolling() {
-  logTrace "customPolling(${pollingInterval}) now:${now()} state.updatedDate:${state.updatedDate}"
+def watchDogChecking() {
+  logTrace "watchDogChecking(${watchDogInterval}) now:${now()} state.updatedDate:${state.updatedDate}"
   if ((getChildDevices()?.size() ?: 0) == 0) {
-    logInfo "Polling canceled. No composite devices!"
+    logInfo "Watchdog checking canceled. No composite devices!"
     return
   }
   double timesSinceContact = (now() - state.updatedDate).abs() / 1000  //time since last update in seconds
-  logDebug "Polling started.  Time since last refresh: ${(timesSinceContact / 60 / 60).round(1)} hours"
-  if ((timesSinceContact / 60 / 60) > (pollingInterval ?: 24)) {
-    logDebug "Polling interval exceeded"
-    refresh()
+  logDebug "Watchdog checking started.  Time since last check: ${(timesSinceContact / 60).round(1)} minutes"
+  if ((timesSinceContact / 60) > (watchDogInterval ?: 30)) {
+    logDebug "Watchdog checking interval exceeded"
+    if (!device.currentValue("websocket").equals("connected")) {
+      reconnectWebSocket()
+    }
   }
-  runIn(pollingInterval * 60 * 60, customPolling)  //time in seconds
+  runIn(watchDogInterval * 60, watchDogChecking)  //time in seconds
 }
 
 
