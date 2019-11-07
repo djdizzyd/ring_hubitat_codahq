@@ -30,6 +30,8 @@ metadata {
     capability "Refresh"
 
     command "testCommand"
+
+    attribute "websocket", "string"
   }
 
   preferences {
@@ -92,7 +94,6 @@ def updated() {
 
 /**
  * This will create all devices possible. If the user doesn't want some of them they will have to delete them manually for now.
- * The reason I had to do it this way is because I couldn't find a non websockets API call to get a list of alarm devices.
  */
 def createDevices(zid) {
   logDebug "createDevices(${zid})"
@@ -415,19 +416,23 @@ def webSocketStatus(String status) {
 
   if (status.startsWith('failure: ')) {
     log.warn("failure message from web socket ${status}")
+    sendEvent(name: "websocket", value: "failure")
     reconnectWebSocket()
   }
   else if (status == 'status: open') {
     logInfo "websocket is open"
     // success! reset reconnect delay
+    sendEvent(name: "websocket", value: "connected")
     pauseExecution(1000)
     state.reconnectDelay = 1
   }
   else if (status == "status: closing") {
     log.warn "WebSocket connection closing."
+    sendEvent(name: "websocket", value: "closed")
   }
   else {
     log.warn "WebSocket error, reconnecting."
+    sendEvent(name: "websocket", value: "error")
     reconnectWebSocket()
   }
 }
@@ -456,19 +461,24 @@ def initWebsocket(json) {
   try {
     InterfaceUtils.webSocketConnect(device, wsUrl)
     logInfo "Connected!"
+    sendEvent(name: "websocket", value: "connected")
     refresh()
   }
   catch (e) {
     logDebug "initialize error: ${e.message} ${e}"
     log.error "WebSocket connect failed"
+    sendEvent(name: "websocket", value: "error")
+    //let's try again in 15 minutes
+    if (state.reconnectDelay < 900) state.reconnectDelay = 900
+    reconnectWebSocket()
   }
 }
 
 def reconnectWebSocket() {
   // first delay is 2 seconds, doubles every time
   state.reconnectDelay = (state.reconnectDelay ?: 1) * 2
-  // don't let delay get too crazy, max it out at 10 minutes
-  if (state.reconnectDelay > 600) state.reconnectDelay = 600
+  // don't let delay get too crazy, max it out at 30 minutes
+  if (state.reconnectDelay > 1800) state.reconnectDelay = 1800
 
   //If the socket is unavailable, give it some time before trying to reconnect
   runIn(state.reconnectDelay, initialize)
