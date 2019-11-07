@@ -30,6 +30,7 @@ metadata {
 
     attribute "mode", "string"
     attribute "entryDelay", "string"
+    attribute "exitDelay", "string"
     attribute "brightness", "number"
     attribute "countdownTimeLeft", "number"
     attribute "countdownTotal", "number"
@@ -217,6 +218,7 @@ def setValues(deviceInfo) {
       sendEvent(name: "countdownTimeLeft", value: 0)
       sendEvent(name: "countdownTotal", value: 0)
       checkChanged("entryDelay", "inactive")
+      checkChanged("exitDelay", "inactive")
     }
   }
   if (deviceInfo.state?.mode && syncRingToHsm && location.hsmStatus != RING_TO_HSM_MODE_MAP[MODES["${deviceInfo.state?.mode}"]]) {
@@ -244,8 +246,14 @@ def setValues(deviceInfo) {
     //}.collect()
   }
   if (deviceInfo.state?.transition) {
+    def exitDelay = deviceInfo.state?.transition == "exit" ? "active" : "inactive"
+    checkChanged("exitDelay", exitDelay)
     sendEvent(name: "countdownTimeLeft", value: deviceInfo.state?.timeLeft)
     sendEvent(name: "countdownTotal", value: deviceInfo.state?.total)
+  }
+  if (deviceInfo.state?.keySet()?.contains("transitionDelayEndTimestamp")) {
+    def exitDelay = deviceInfo.state?.transitionDelayEndTimestamp != null ? "active" : "inactive"
+    checkChanged("exitDelay", exitDelay)
   }
   if (deviceInfo.state?.percent) {
     log.warn "${device.label} is updating firmware: ${deviceInfo.state?.percent}% complete"
