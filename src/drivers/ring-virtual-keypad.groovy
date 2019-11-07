@@ -72,7 +72,8 @@ def setVolume(vol) {
     logDebug "No mute/unmute needed..."
   }
   if (device.currentValue("volume") != vol) {
-    parent.simpleRequest("set-volume-keypad", [dst: device.getDataValue("zid"), volume: vol])
+    def data = ["volume": (vol == null ? 50 : vol).toDouble() / 100]
+    parent.simpleRequest("setdevice", [zid: device.getDataValue("zid"), dst: null, data: data])
   }
   else {
     logInfo "Already at volume."
@@ -122,7 +123,8 @@ def setBrightness(brightness) {
   logDebug "Attempting to set brightness ${brightness}."
   brightness = brightness > 100 ? 100 : brightness
   brightness = brightness < 0 ? 0 : brightness
-  parent.simpleRequest("set-brightness-keypad", [dst: device.getDataValue("zid"), brightness: brightness])
+  def data = ["brightness": (brightness == null ? 100 : brightness).toDouble() / 100]
+  parent.simpleRequest("setdevice", [zid: device.getDataValue("zid"), dst: null, data: data])
 }
 
 def refresh() {

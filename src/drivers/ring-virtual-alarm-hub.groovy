@@ -79,13 +79,16 @@ def refresh() {
 def setMode(mode) {
   logDebug "setMode(${mode})"
   if (mode == "Disarmed" && device.currentValue("mode") != "off") {
-    parent.simpleRequest("setmode", [mode: "none", zid: device.getDataValue("security-panel-zid"), dst: device.getDataValue("src")])
+    def data = ["mode": "none"]
+    parent.simpleRequest("setcommand", [type: "security-panel.switch-mode", zid: device.getDataValue("security-panel-zid"), dst: device.getDataValue("src"), data: data])
   }
   else if (mode == "Home" && device.currentValue("mode") != "home") {
-    parent.simpleRequest("setmode", [mode: "some", zid: device.getDataValue("security-panel-zid"), dst: device.getDataValue("src")])
+    def data = ["mode": "some"]
+    parent.simpleRequest("setcommand", [type: "security-panel.switch-mode", zid: device.getDataValue("security-panel-zid"), dst: device.getDataValue("src"), data: data])
   }
   else if (mode == "Away" && device.currentValue("mode") != "away") {
-    parent.simpleRequest("setmode", [mode: "all", zid: device.getDataValue("security-panel-zid"), dst: device.getDataValue("src")])
+    def data = ["mode": "all"]
+    parent.simpleRequest("setcommand", [type: "security-panel.switch-mode", zid: device.getDataValue("security-panel-zid"), dst: device.getDataValue("src"), data: data])
   }
   else {
     logInfo "${device.label} already set to ${mode}.  No change necessary"
@@ -99,12 +102,12 @@ def off() {
   def alarm = device.currentValue("alarm")
   logTrace "previous value alarm: $alarm"
   //sendEvent(name: "alarm", value: "off")
-  parent.simpleRequest("setsiren", [mode: "silence-siren", zid: device.getDataValue("security-panel-zid"), dst: device.getDataValue("src")])
+  parent.simpleRequest("setcommand", [type: "security-panel.silence-siren", zid: device.getDataValue("security-panel-zid"), dst: device.getDataValue("src"), data: {}])
 }
 
 def siren() {
   logDebug "Attempting to turn on siren."
-  parent.simpleRequest("setsiren", [mode: "sound-siren", zid: device.getDataValue("security-panel-zid"), dst: device.getDataValue("src")])
+  parent.simpleRequest("setcommand", [type: "security-panel.sound-siren", zid: device.getDataValue("security-panel-zid"), dst: device.getDataValue("src"), data: {}])
 }
 
 def strobe() {
@@ -122,7 +125,8 @@ def sirenTest() {
     log.warn "Please disarm the alarm before testing the siren."
     return
   }
-  parent.simpleRequest("siren-test", [mode: "start", zid: device.getDataValue("security-panel-zid")])
+  //siren-test.stop to cancel
+  parent.simpleRequest("setcommand", [type: "siren-test.start", zid: device.getDataValue("security-panel-zid"), dst: null, data: {}])
 }
 /*alarm capabilities end*/
 
@@ -144,7 +148,8 @@ def setVolume(vol) {
   }
   if (device.currentValue("volume") != vol) {
     logTrace "requesting volume change from ${device.currentValue("volume")} to ${vol}"
-    parent.simpleRequest("set-volume-base", [zid: device.getDataValue("hub.redsky-zid"), volume: vol])
+    def data = ["volume": (vol == null ? 50 : vol).toDouble() / 100]
+    parent.simpleRequest("setdevice", [zid: device.getDataValue("hub.redsky-zid"), dst: null, data: data])
   }
   else {
     logInfo "Already at volume."
