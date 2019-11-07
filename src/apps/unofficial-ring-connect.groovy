@@ -26,7 +26,7 @@ definition(
   name: "Unofficial Ring Connect",
   namespace: "codahq-hubitat",
   author: "Ben Rimmasch (codahq)",
-  description: "Service Manager for Ring Floodlights, Spotlights and Chimes",
+  description: "Service Manager for Ring Alarm, Smart Lighting, Floodlights, Spotlights and Chimes",
   category: "Convenience",
   iconUrl: "https://github.com/fake/url/what/is/this/for/ic_cast_grey_24dp.png",
   iconX2Url: "https://github.com/fake/url/what/is/this/for/ic_cast_grey_24dp.png",
@@ -77,7 +77,7 @@ def locations() {
 
 def mainPage() {
 
-  //getNotifications()
+  getNotifications()
 
   def locations = []
   state.locationOptions.each { location ->
@@ -150,11 +150,11 @@ def configurePDevice(params) {
           + "it.  At the time of the creation of this app a WebSockets client could only be created in a device.  It is/was "
           + "not available to apps.")
         paragraph("To keep complexity low (for now) you must navigate to the API device and create all devices manually.  If there "
-          + "is a device that you don't want simply delete it.  If a device is not created that probably means the device "
-          + "driver for it was not installed or is not yet created for that device type. If Ring adds or I find an API call "
-          + "that can list hub devices (Z-Wave and Beams) with their ZIDs then I will add functionality to create and "
-          + "maintain those types of devices through the HE app.  For now, the only way I can get a list of these devices "
-          + "is through the web socket so it will only be done through the device.")
+          + "is a device that you don't want simply delete it after you finish creating all devices.  If a device is not created "
+          + "that probably means the device driver for it was not installed or is not yet created for that device type. If Ring "
+          + "adds or I find an API call that can list hub devices (Z-Wave and Beams) with their ZIDs then I will add functionality "
+          + "to create and maintain those types of devices through the HE app.  For now, the only way I can get a list of these "
+          + "devices is through the web socket so it will only be done through the API device which holds the API device.")
       }
     }
     section {
@@ -277,6 +277,56 @@ def initialize() {
   if (!state.appDeviceId) {
     generateAppDeviceId()
   }
+
+  try {
+    if (!state.accessToken) {
+      createAccessToken()
+    }
+  }
+  catch (ex) {
+    log.warn "Probs need to enable OATH in the app's code, dood/ette."
+  }
+  logDebug "Access token: ${state.accessToken}"
+  logDebug "Full API server URL: ${getFullApiServerUrl()}"
+  def path = "${getFullApiServerUrl()}/notify?access_token=${atomicState.accessToken}"
+  log.info "Notification POST Path: ${path}"
+
+}
+
+mappings {
+  path("/notify") {
+    action:
+    [POST: "processNotification"]
+  }
+}
+
+/**
+ * This method won't get called because of the whitelist.  If it does we want to know about it so I have everything printing to error
+ **/
+def processNotification() {
+  log.error "processNotification()"
+
+  //def type = params.deviceType
+  def data = request.JSON
+  //def attribute = attributeFor(type)
+  //def devices = settings[type]
+  def deviceId = data?.deviceId
+  def callbackUrl = data?.callbackUrl
+  def device = devices.find { it.id == deviceId }
+
+  log.error "notify, params: ${params}, request: ${request}, data: ${data}, device: ${device}"
+  if (device) {
+    log.debug "Adding switch subscription " + callbackUrl
+    //state[deviceId] = [callbackUrl: callbackUrl]
+    //subscribe(device, attribute, deviceHandler)
+  }
+  log.info state
+
+  jsonResponse([status: "complete"])
+}
+
+def jsonResponse(respMap) {
+  render contentType: 'application/json', data: JsonOutput.toJson(respMap)
 }
 
 def getDevices() {
@@ -367,11 +417,11 @@ def getDeviceIds() {
         acc << [name: "${DEVICE_TYPES[node.kind].name} - ${node.description}", id: nodeId, kind: node.kind]
       }
       acc
-      //Stickup Cam (Patio North) stickup_cam_lunar
-      //Spotlight Cam Battery (Side South) stickup_cam_v4
-      //Spotlight (Backyard South) hp_cam_v2
-      //Floodlight (Backyard North) hp_cam_v1
-      //Stickup Cam Elite (Theater) stickup_cam_elite
+      //Stickup Cam - stickup_cam_lunar
+      //Spotlight Cam Battery - stickup_cam_v4
+      //Spotlight - hp_cam_v2
+      //Floodlight - hp_cam_v1
+      //Stickup Cam Elite - stickup_cam_elite
   }
 }
 
@@ -535,8 +585,6 @@ private getRequests(parts) {
       , query: ["locationID": "${selectedLocations}"]
     ],
 
-
-
     /*
 "refresh": [
 method: GET,
@@ -625,18 +673,22 @@ uri: "https://api.ring.com"
         'Content-Type': "application/x-www-form-urlencoded"
       ]
     ],
-
     "subscribe": [
-      method: PUT
-      , type: "bearer"
-      , params: [
-      uri: "https://api.ring.com"
-      , path: "/clients_api/device"
-      , requestContentType: JSON
-      , body: [
-      device: ["push_notification_token": "https://cloud.hubitat.com/api/${location.hubs[0].id}/apps/${app.id}/devices/all?access_token=[maker access token]"]
-    ]
-    ]
+      method: PUT,
+      type: "bearer",
+      params: [
+        uri: "https://api.ring.com",
+        path: "/clients_api/device",
+        requestContentType: JSON,
+        body: [
+          device: ["push_notification_token": "${getFullApiServerUrl()}/notify?access_token=${state.accessToken}"]
+        ]
+      ],
+      headers: [
+        "User-Agent": "ring_official_windows/2.4.0",
+        "Hardware_ID": state.appDeviceId,
+        "Accept": "application.vnd.api.v11+json"
+      ]
     ],
     "master-key": [
       method: GET
@@ -660,8 +712,6 @@ static standardHeaders = [
   , 'Connection': 'keep-alive'
   //, 'Accept': '*/*'
 ]
-
-
 
 
 def parse(String description) {
@@ -689,7 +739,7 @@ def simpleRequest(type, data = [:]) {
   def params = formatParams(request, type, data)
 
   //actions that aren't ready can abort here
-  if (type == "subscribe") return
+  //if (type == "subscribe") return
 
   if (request.synchronous) {
     return doSynchronousAction(request.method, type, params)
@@ -887,9 +937,17 @@ def responseHandler(response, params) {
     //else if (params.method == "tickets") {
     //  getChildDevice(data.dni).childParse(type, [response: resp.getStatus(), msg: body])
     //}
+    else if (params.method == "subscribe") {
+      if (response.status != 204) {
+        log.error "Notification subscription failed!"
+      }
+      else {
+        log.info "Subscribed to push notifications (except it doesn't work for now because of whitelist)"
+      }
+    }
     else {
       log.error "Unhandled method!"
-      response.properties.each {log.warn it}
+      response.properties.each { log.warn it }
       if (response.data) {
         log.error "Data: ${response.data}"
       }
