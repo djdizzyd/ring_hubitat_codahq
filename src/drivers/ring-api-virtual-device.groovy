@@ -29,7 +29,7 @@ metadata {
     capability "Initialize"
     capability "Refresh"
 
-    command "testCommand"
+    //command "testCommand"
 
     attribute "websocket", "string"
   }
@@ -59,30 +59,26 @@ def configure() {
 }
 
 def testCommand() {
-  //simpleRequest("manager", [dst: "***REMOVED***"])
-  //simpleRequest("finddev", [dst: "***REMOVED***", adapterId: "zwave"])
-  //simpleRequest("sirenon", [dst: "***REMOVED***"])
+  //this functionality doesn't work right now.  don't use it.  debug/development in progress
+
+  //def debugDst = state.hubs.first().zid
+  //simpleRequest("manager", [dst: debugDst])
+  //simpleRequest("finddev", [dst: debugDst, adapterId: "zwave"])
+  //simpleRequest("sirenon", [dst: debugDst])
 
   //parent.simpleRequest("master-key", [dni: device.deviceNetworkId, code: "5555", name: "Guest"])
 
-  /*
+  //def zeroEpoch = Calendar.getInstance(TimeZone.getTimeZone('GMT'))
+  //zeroEpoch.setTimeInMillis(0)
+  //println zeroEpoch.format("dd-MMM-yyyy HH:mm:ss zzz")
+  //https://currentmillis.com/
 
-def zeroEpoch = Calendar.getInstance(TimeZone.getTimeZone('GMT'))
-zeroEpoch.setTimeInMillis(0)
-println zeroEpoch.format("dd-MMM-yyyy HH:mm:ss zzz")
-https://currentmillis.com/
-
-*/
-
-  //location.getTimeZone().properties.each {log.warn it}
-  location.properties.each { log.warn it }
-  device.properties.each { log.warn it }
-  devices.properties.each { log.warn it }
 }
 
 
 def initialize() {
   logDebug "initialize()"
+  //old method of getting websocket auth
   //parent.simpleRequest("ws-connect", [dni: device.deviceNetworkId])
   parent.simpleRequest("tickets", [dni: device.deviceNetworkId])
   state.seq = 0
@@ -102,7 +98,6 @@ def createDevices(zid) {
 }
 
 def refresh(zid) {
-  //def dst = "***REMOVED***"
   logDebug "refresh(${zid})"
   unschedule()
   state.updatedDate = now()
@@ -140,13 +135,13 @@ def childParse(type, params = []) {
 
   if (type == "ws-connect" || type == "tickets") {
     initWebsocket(params.msg)
-    //42["message",{"msg":"RoomGetList","dst":"***REMOVED***","seq":1}]
+    //42["message",{"msg":"RoomGetList","dst":[HUB_ZID],"seq":1}]
   }
   else if (type == "master-key") {
     logTrace "master-key ${params.msg}"
-    simpleRequest("setcode", [code: params.code, dst: "***REMOVED***" /*params.dst*/, master_key: params.msg.masterkey])
-    simpleRequest("adduser", [code: params.name, dst: "***REMOVED***" /*params.dst*/])
-    simpleRequest("enableuser", [code: params.name, dst: "***REMOVED***" /*params.dst*/, acess_code_zid: "***REMOVED***"])
+    //simpleRequest("setcode", [code: params.code, dst: "[HUB_ZID]" /*params.dst*/, master_key: params.msg.masterkey])
+    //simpleRequest("adduser", [code: params.name, dst: "[HUB_ZID]" /*params.dst*/])
+    //simpleRequest("enableuser", [code: params.name, dst: "[HUB_ZID]" /*params.dst*/, acess_code_zid: "[ACCESS_CODE_ZID]"])
   }
   else {
     log.error "Unhandled type ${type}"
@@ -188,32 +183,6 @@ private getRequests(parts) {
     "refresh": ["message", [msg: "DeviceInfoDocGetList", dst: parts.dst, seq: state.seq]],
     "manager": ["message", [msg: "GetAdapterManagersList", dst: parts.dst, seq: state.seq]],//working but not used
     "sysinfo": ["message", [msg: "GetSystemInformation", dst: parts.dst, seq: state.seq]],  //working but not used
-    "setmode": ["message", [
-      msg: "DeviceInfoSet",
-      datatype: "DeviceInfoSetType",
-      body: [[
-        zid: parts.zid,
-        command: [v1: [[
-          commandType: "security-panel.switch-mode",
-          data: ["mode": parts.mode]
-        ]]]
-      ]],
-      dst: parts.dst,
-      seq: state.seq
-    ]],
-    "setsiren": ["message", [
-      body: [[
-        zid: parts.zid,
-        command: [v1: [[
-          commandType: "security-panel.${parts.mode}",
-          data: {}
-        ]]]
-      ]],
-      datatype: "DeviceInfoSetType",
-      dst: parts.dst,
-      msg: "DeviceInfoSet",
-      seq: state.seq
-    ]],
     "finddev": ["message", [   //working but not used
       msg: "FindDevice",
       datatype: "FindDeviceType",
@@ -221,62 +190,8 @@ private getRequests(parts) {
       dst: parts.dst,
       seq: state.seq
     ]],
-    "setlock": ["message", [
-      msg: "DeviceInfoSet",
-      datatype: "DeviceInfoSetType",
-      body: [[
-        zid: parts.zid,
-        command: [v1: [[
-          commandType: "lock.${parts.mode}",
-          data: {}
-        ]]]
-      ]],
-      dst: parts.dst,
-      seq: state.seq
-    ]],
-    "siren-test": ["message", [
-      body: [[
-        zid: parts.zid,
-        command: [v1: [[
-          commandType: "siren-test.${parts.mode}",
-          data: {}
-        ]]]
-      ]],
-      datatype: "DeviceInfoSetType",
-      dst: null,
-      msg: "DeviceInfoSet",
-      seq: state.seq
-    ]],
-    "set-volume-keypad": ["message", [
-      body: [[
-        zid: parts.dst,
-        device: ["v1": ["volume": (parts.volume == null ? 50 : parts.volume).toDouble() / 100]]
-      ]],
-      datatype: "DeviceInfoSetType",
-      dst: null,
-      msg: "DeviceInfoSet",
-      seq: state.seq
-    ]],
-    "set-brightness-keypad": ["message", [
-      body: [[
-        zid: parts.dst,
-        device: ["v1": ["brightness": (parts.brightness == null ? 100 : parts.brightness).toDouble() / 100]]
-      ]],
-      datatype: "DeviceInfoSetType",
-      dst: null,
-      msg: "DeviceInfoSet",
-      seq: state.seq
-    ]],
-    "set-volume-base": ["message", [
-      body: [[
-        zid: parts.zid,
-        device: ["v1": ["volume": (parts.volume == null ? 50 : parts.volume).toDouble() / 100]]
-      ]],
-      datatype: "DeviceInfoSetType",
-      dst: null,
-      msg: "DeviceInfoSet",
-      seq: state.seq
-    ]],
+    /* not finished */
+    /*
     "setcode": ["message", [
       msg: "SetKeychainValue",
       datatype: "KeychainSetValueType",
@@ -356,22 +271,7 @@ private getRequests(parts) {
       dst: parts.dst,
       seq: state.seq
     ]],
-    "setlight": ["message", [
-      body: [[
-        zid: parts.zid,
-        command: [v1: [[
-          commandType: "light-mode.set",
-          data: [
-            "lightMode": parts.switch,
-            "duration": parts.duration
-          ]
-        ]]]
-      ]],
-      datatype: "DeviceInfoSetType",
-      dst: parts.dst,
-      msg: "DeviceInfoSet",
-      seq: state.seq
-    ]],
+    */
     "setcommand": ["message", [
       body: [[
         zid: parts.zid,
@@ -398,14 +298,15 @@ private getRequests(parts) {
       seq: state.seq
     ]],
 
-    //set power save keypad   42["message",{"body":[{"zid":"***REMOVED***","device":{"v1":{"powerSave":"extended"}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":7}]
-    //set power save off keyp 42["message",{"body":[{"zid":"***REMOVED***","device":{"v1":{"powerSave":"off"}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":8}]
-    //test mode motion detctr 42["message",{"body":[{"zid":"***REMOVED***","command":{"v1":[{"commandType":"detection-test-mode.start","data":{}}]}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":9}]
-    //cancel test above       42["message",{"body":[{"zid":"***REMOVED***","command":{"v1":[{"commandType":"detection-test-mode.cancel","data":{}}]}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":10}]
-    //motion sensitivy motdet 42["message",{"body":[{"zid":"***REMOVED***","device":{"v1":{"sensitivity":1}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":11}]
-    //more                    42["message",{"body":[{"zid":"***REMOVED***","device":{"v1":{"sensitivity":0}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":12}]
-    //0 high, 1 mid, 2 low    42["message",{"body":[{"zid":"***REMOVED***","device":{"v1":{"sensitivity":2}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":13}]
-    //for sniffing start xposed module for unpinning, restart phone.  connect app once on osprey.  change to mitmproxy on kestrel.  should work.  if doesn't, force close app and start again on osprey.  then while app is open switch to kestrel.
+    //future functionality maybe
+    //set power save keypad   42["message",{"body":[{"zid":"[KEYPAD_ZID]","device":{"v1":{"powerSave":"extended"}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":7}]
+    //set power save off keyp 42["message",{"body":[{"zid":"[KEYPAD_ZID]","device":{"v1":{"powerSave":"off"}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":8}]
+    //test mode motion detctr 42["message",{"body":[{"zid":"[MOTION_SENSOR_ZID]","command":{"v1":[{"commandType":"detection-test-mode.start","data":{}}]}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":9}]
+    //cancel test above       42["message",{"body":[{"zid":"[MOTION_SENSOR_ZID]","command":{"v1":[{"commandType":"detection-test-mode.cancel","data":{}}]}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":10}]
+    //motion sensitivy motdet 42["message",{"body":[{"zid":"[MOTION_SENSOR_ZID]","device":{"v1":{"sensitivity":1}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":11}]
+    //more                    42["message",{"body":[{"zid":"[MOTION_SENSOR_ZID]","device":{"v1":{"sensitivity":0}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":12}]
+    //0 high, 1 mid, 2 low    42["message",{"body":[{"zid":"[MOTION_SENSOR_ZID]","device":{"v1":{"sensitivity":2}}}],"datatype":"DeviceInfoSetType","dst":null,"msg":"DeviceInfoSet","seq":13}]
+
   ]
 }
 
@@ -544,7 +445,6 @@ def parse(String description) {
     }
 
     deviceInfos.each {
-      //if (it.src == '***REMOVED***')
       logTrace "created deviceInfo: ${JsonOutput.prettyPrint(JsonOutput.toJson(it))}"
 
       if (it?.msg == "Passthru") {
