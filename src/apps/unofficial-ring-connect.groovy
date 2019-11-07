@@ -427,7 +427,7 @@ def getDeviceIds() {
 
 def getNotifications() {
   simpleRequest("subscribe")
-  //app.properties.each { log.warn it }
+
 }
 
 private getRING_API_DNI() {
@@ -573,94 +573,40 @@ private getRequests(parts) {
       ]
     ],
     "tickets": [
-      method: GET
-      , type: "bearer"
-      , params: [
-      uri: "https://app.ring.com"
-      , path: "/api/v1/clap/tickets"
-      , contentType: JSON
-      , requestContentType: TEXT
-      //,textParser: true
-    ]
-      , query: ["locationID": "${selectedLocations}"]
+      method: GET,
+      type: "bearer",
+      params: [
+        uri: "https://app.ring.com",
+        path: "/api/v1/clap/tickets",
+        contentType: JSON,
+        requestContentType: TEXT//,
+        //textParser: true
+      ],
+      query: ["locationID": "${selectedLocations}"]
     ],
-
-    /*
-"refresh": [
-method: GET,
-params: [
-uri: "https://api.ring.com",
-path: "/clients_api/ring_devices",
-contentType: JSON
-]
-],
-"devices": [
-method: GET
-, params: [
-uri: "https://api.ring.com"
-, path: "/clients_api/ring_devices"
-, contentType: JSON
-]
-],
-
-
-    "light-on": [
-      method: PUT
-      , params: [
-        uri: "https://api.ring.com"
-        , path: "/clients_api/doorbots/${getRingDeviceId(parts.dni)}/floodlight_light_on"
-        , contentType: TEXT
-      ]
-    ],
-    "light-off": [
-      method: PUT
-      , params: [
-        uri: "https://api.ring.com"
-        , path: "/clients_api/doorbots/${getRingDeviceId(parts.dni)}/floodlight_light_off"
-        , contentType: TEXT
-      ]
-    ],
-    "siren-on": [
-      method: PUT
-      , params: [
-        uri: "https://api.ring.com"
-        , path: "/clients_api/doorbots/${getRingDeviceId(parts.dni)}/siren_on"
-        , contentType: JSON
-      ]
-    ],
-    "siren-off": [
-      method: PUT
-      , params: [
-        uri: "https://api.ring.com"
-        , path: "/clients_api/doorbots/${getRingDeviceId(parts.dni)}/siren_off"
-        , contentType: TEXT
-      ]
-    ],
-*/
-
     "refresh-device": [
-      method: GET
-      , params: [
-      uri: "https://api.ring.com"
-      , path: "/clients_api/ring_devices/${getRingDeviceId(parts.dni)}"
-      , contentType: JSON
-    ]
+      method: GET,
+      params: [
+        uri: "https://api.ring.com",
+        path: "/clients_api/ring_devices/${getRingDeviceId(parts.dni)}",
+        contentType: JSON
+      ]
     ],
     "refresh-security-device": [
-      method: GET
-      , params: [
-      uri: "https://api.ring.com"
-      , path: "/clients_api/ring_devices/${parts.dni}"
-      , contentType: JSON
-    ]
+      method: GET,
+      params: [
+        uri: "https://api.ring.com",
+        path: "/clients_api/ring_devices/${parts.dni}",
+        contentType: JSON
+      ]
     ],
     "pref-security-device": [
-      method: GET
-      , params: [
-      uri: "https://app.ring.com"
-      , path: "/api/v1/rs/preferences/devices/${parts.dni}?deviceIdType=zid&deviceType=${parts.type}&userId=***REMOVED***&locationId=${selectedLocations}"
-      , contentType: JSON
-    ]
+      method: GET,
+      params: [
+        uri: "https://app.ring.com",
+        path: "/api/v1/rs/preferences/devices/${parts.dni}?deviceIdType=zid&deviceType=${parts.type}&userId=${parts.user_id}&locationId=${selectedLocations}",
+        contentType: JSON
+      ]
     ],
     "ws-connect": [
       method: POST,
@@ -691,16 +637,15 @@ uri: "https://api.ring.com"
       ]
     ],
     "master-key": [
-      method: GET
-      , type: "bearer"
-      , params: [
-      uri: "https://app.ring.com"
-      , path: "/api/v1/rs/masterkey?locationId=${selectedLocations}"
-      , contentType: JSON
+      method: GET,
+      type: "bearer",
+      params: [
+        uri: "https://app.ring.com",
+        path: "/api/v1/rs/masterkey?locationId=${selectedLocations}",
+        contentType: JSON
+      ]
     ]
-    ]
-
-    //https://cloud.hubitat.com/api/[HUBUID]/apps/937/devices/all?access_token= 10[maker access token]
+    //https://cloud.hubitat.com/api/[HUBUID]/apps/[APPID]/devices/all?access_token=[maker access token]
   ]
 }
 
@@ -738,7 +683,7 @@ def simpleRequest(type, data = [:]) {
 
   def params = formatParams(request, type, data)
 
-  //actions that aren't ready can abort here
+  //actions that aren't done being developed can abort here
   //if (type == "subscribe") return
 
   if (request.synchronous) {
@@ -819,65 +764,6 @@ def doSynchronousAction(type, method, params) {
   return retval
 }
 
-/*
-def doAuth(previousMethod) {
-  logDebug "doAuth()"
-
-  if (state.access_token) state.access_token = "EMPTY"
-  if (state.access_token == "EMPTY") {
-    def params = [
-      uri: "https://oauth.ring.com",
-      path: "/oauth/token",
-      headers: [
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36"
-      ],
-      requestContentType: "application/json",
-      contentType: "application/json",
-      body: [
-        "client_id": "ring_official_android",
-        "grant_type": "password",
-        "password": "${password}",
-        "scope": "client",
-        "username": "${username}"
-      ]
-    ]
-
-    doAction("asynchttpPost", "auth", params, previousMethod)
-
-  }
-}
-*/
-
-/*
-def doSession(previousMethod) {
-  logDebug "doSession()"
-
-  if (state.authentication_token) state.authentication_token = "EMPTY"
-  if (state.authentication_token == "EMPTY") {
-    def params = [
-      uri: "https://api.ring.com",
-      path: "/clients_api/session",
-      headers: [
-        Authorization: "Bearer ${state.access_token}",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36"
-      ],
-      requestContentType: "application/json",
-      contentType: "application/json",
-      body: [
-        device: [
-          "hardware_id": state.appDeviceId,
-          "metadata": [api_version: 9],
-          "os": "android"
-        ]
-      ]
-    ]
-
-    doAction("asynchttpPost", "session", params, previousMethod)
-
-  }
-}
-*/
-
 def responseHandler(response, params) {
   logDebug "responseHandler(${response.status}, ${params})"
   if (response.status == 401) {
@@ -954,88 +840,11 @@ def responseHandler(response, params) {
       throw new java.lang.UnsupportedOperationException("${params.method} is not implemented!")
     }
   }
-
-
 }
 
 def loggedIn() {
   return state.authentication_token && state.authentication_token != "EMPTY"
 }
-
-/*
-def getTokens() {
-  def s = "${username}:${password}"
-  String encodedUandP = s.bytes.encodeBase64()
-
-  if (!state.access_token) state.access_token = "EMPTY"
-
-  if (state.access_token == "EMPTY") {
-
-    def params = [
-      uri: "https://oauth.ring.com",
-      path: "/oauth/token",
-      headers: [
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36"
-      ],
-      requestContentType: "application/json",
-      body: "{\"client_id\": \"ring_official_android\",\"grant_type\": \"password\",\"password\": \"${password}\",\"scope\": \"client\",\"username\": \"${username}\"}"
-    ]
-    try {
-      httpPost(params) {
-        resp ->
-          logDebug "POST response code: ${resp.status}"
-
-          logDebug "response data: ${resp.data}"
-          state.access_token = resp.data.access_token
-          state.refresh_token = resp.data.refresh_token
-          logDebug "access token: ${state.access_token}"
-      }
-    }
-    catch (e) {
-      log.error "HTTP Exception Received on POST: $e"
-      log.error "response data: ${resp?.data}"
-      return
-
-    }
-  }
-
-  if (!state.authentication_token) state.authentication_token = "EMPTY"
-
-  if (state.authentication_token == "EMPTY") {
-
-    params = [
-      uri: "https://api.ring.com",
-      path: "/clients_api/session",
-      headers: [
-        Authorization: "Bearer ${state.access_token}",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36"
-      ],
-      requestContentType: "application/x-www-form-urlencoded",
-      body: "device%5Bos%5D=android&device%5Bhardware_id%5D=${state.appDeviceId}&api_version=9"
-    ]
-
-    try {
-      httpPost(params) {
-        resp ->
-          logDebug "POST response code: ${resp?.status}"
-
-          logDebug "response data: ${resp?.data}"
-          state.authentication_token = resp?.data?.profile.authentication_token
-      }
-    }
-    catch (e) {
-      log.error "HTTP Exception Received on POST: $e"
-      log.error "response data: ${resp.data}"
-      return
-
-    }
-
-    logDebug "Authenticated, Token Found."
-
-  }
-  return state.authentication_token
-}
-*/
 
 //logging help methods
 private logInfo(msg) {
