@@ -1,5 +1,5 @@
 /**
- * 	Completely Unoffical Ring Connect App For Floodlights/Spotlights/Chimes Only (Don't hate me, Ring guys. I had to do it.)
+ * 	Completely Unofficial Ring Connect App For Floodlights/Spotlights/Chimes Only (Don't hate me, Ring guys. I had to do it.)
  *
  *  Copyright 2019 Ben Rimmasch
  *
@@ -15,6 +15,9 @@
  *
  *  Change Log:
  *  2019-03-02: Initial
+ *  2019-11-10: -2FA Support
+ *              -Polling for dings
+ *              -New devices
  *
  */
 
@@ -30,12 +33,14 @@ definition(
   category: "Convenience",
   iconUrl: "https://github.com/fake/url/what/is/this/for/ic_cast_grey_24dp.png",
   iconX2Url: "https://github.com/fake/url/what/is/this/for/ic_cast_grey_24dp.png",
-  iconX3Url: "https://github.com/fake/url/what/is/this/for/ic_cast_grey_24dp.png"
+  iconX3Url: "https://github.com/fake/url/what/is/this/for/ic_cast_grey_24dp.png",
+  singleInstance: true
 )
 
 preferences {
   page(name: "mainPage")
   page(name: "login")
+  page(name: "secondStep")
   page(name: "locations")
   page(name: "configurePDevice")
   page(name: "deletePDevice")
@@ -43,20 +48,46 @@ preferences {
   page(name: "discoveryPage", title: "Device Discovery", content: "discoveryPage", refreshTimeout: 10)
   page(name: "addDevices", title: "Add Ring Devices", content: "addDevices")
   page(name: "deviceDiscovery")
+  page(name: "pollingPage")
+  page(name: "logging")
 }
 
 def login() {
-  dynamicPage(name: "login", title: "Log into Your Ring Account", nextPage: "locations", uninstall: true) {
+  dynamicPage(name: "login", title: "Log into Your Ring Account", nextPage: twofactor ? "secondStep" : "locations", uninstall: true) {
     section("Ring Account Information") {
       preferences {
         input "username", "email", title: "Ring Username", description: "Email used to login to Ring.com", displayDuringSetup: true, required: true
         input "password", "password", title: "Ring Password", description: "Password you login to Ring.com", displayDuringSetup: true, required: true
+        input name: "twofactor", type: "bool", title: "2FA Enabled", description: "Toggle on if 2FA is enabled", displayDuringSetup: true, defaultValue: false, submitOnChange: true
       }
     }
   }
 }
 
+def secondStep() {
+
+  state.refresh_token = null
+  def auth_token = authenticate()
+
+  if (!loggedIn() && auth_token != "challenge") {
+    return dynamicPage(name: "secondStep", title: "Authenticate failed!  Please check your Ring username and password", nextPage: "login", uninstall: true) {
+    }
+  }
+  dynamicPage(name: "secondStep", title: "Check text messages for the 2-step authentication code", nextPage: "locations", uninstall: true) {
+    section("2-Step Code") {
+      input "twoStepCode", "password", title: "Code", description: "2-Step Temporary Code", displayDuringSetup: false, required: true
+    }
+  }
+}
+
 def locations() {
+
+  if (twofactor) {
+    authenticate(twoStepCode)
+  }
+  else {
+    authenticate()
+  }
 
   def locations = simpleRequest("locations")
   def options = [:]
@@ -77,7 +108,7 @@ def locations() {
 
 def mainPage() {
 
-  getNotifications()
+  //getNotifications()
 
   def locations = []
   state.locationOptions.each { location ->
@@ -107,14 +138,39 @@ def mainPage() {
     }
 
     section("Polling") {
-      preferences {
-        input name: "dingPolling", type: "bool", title: "Poll for motion and rings", defaultValue: false
-        input name: "dingInterval", type: "number", title: "Number of seconds in between motion/ring polls", defaultValue: 15
-        input name: "lightPolling", type: "bool", title: "Poll for light state", defaultValue: false
-        input name: "lightInterval", type: "number", title: "Number of seconds in between light polls", defaultValue: 15
-      }
+      href "pollingPage", title: "Configure polling for motion alerts and rings", description: ""
     }
 
+    section("Logging") {
+      href "logging", title: "Configure logging", description: ""
+    }
+
+  }
+}
+
+def pollingPage() {
+
+  unschedule()
+  if (dingPolling) {
+    setupDings()
+  }
+
+  dynamicPage(name: "pollingPage", title: "Configure settings to poll for motions and rings", nextPage: "mainPage", uninstall: false) {
+    section("WARNING!!!") {
+      paragraph("Polling too quickly can have adverse affects on performance of your hubitat hub and may even get your Ring account temporarily locked.")
+    }
+    section("Polling Configuration") {
+      preferences {
+        input name: "dingPolling", type: "bool", title: "Poll for motion and rings", defaultValue: false, submitOnChange: true
+        input name: "dingInterval", type: "number", range: "7..20", title: "Number of seconds in between motion/ring polls", defaultValue: 15, submitOnChange: true
+      }
+    }
+  }
+}
+
+
+def logging() {
+  dynamicPage(name: "logging", title: "Configure settings logging", nextPage: "mainPage", uninstall: false) {
     section("Logging") {
       preferences {
         input name: "descriptionTextEnable", type: "bool", title: "Enable descriptionText logging", defaultValue: false
@@ -343,7 +399,7 @@ def addDevices() {
 
   selectedDevices.each {
     id ->
-      bridgeLinking
+      //bridgeLinking
 
       logTrace "Selected id ${id}"
 
@@ -366,7 +422,9 @@ def addDevices() {
           def newDevice = addChildDevice("codahq-hubitat", DEVICE_TYPES[selectedDevice.kind].driver, getFormattedDNI(selectedDevice.id), selectedDevice?.hub, [
             "label": selectedDevice.id == RING_API_DNI ? DEVICE_TYPES[selectedDevice.kind].driver : (selectedDevice?.name ?: DEVICE_TYPES[selectedDevice.kind].name),
             "data": [
-              "device_id": selectedDevice.id
+              "device_id": selectedDevice.id,
+              "kind": selectedDevice.kind,
+              "kind_name": DEVICE_TYPES[selectedDevice.kind].name
             ]
           ])
           if (selectedDevice.id == RING_API_DNI) {
@@ -381,11 +439,18 @@ def addDevices() {
           sectionText = sectionText + "An error occured ${e} \r\n"
         }
       }
+      else {
+        d.updateDataValue("kind", selectedDevice.kind)
+        d.updateDataValue("kind_name", DEVICE_TYPES[selectedDevice.kind].name)
+      }
   }
 
   logDebug sectionText
   return dynamicPage(name: "addDevices", title: "Devices Added", nextPage: "mainPage", uninstall: true) {
     if (sectionText != "") {
+      section("IMPORTANT!!!") {
+        paragraph "If you added an Alarm base or Smart Lighting bridge you must now go to that device and click 'Create Devices'.\r\n"
+      }
       section("Add Ring Device Results:") {
         paragraph sectionText
       }
@@ -427,8 +492,32 @@ def getDeviceIds() {
 
 def getNotifications() {
   simpleRequest("subscribe")
+}
+
+def setupDings() {
+  logDebug "setupDings()"
+  state.dingables = []
+  getChildDevices().each { d ->
+    logTrace "d's kind: ${d.getDataValue("kind")}"
+    if (d.getDataValue("kind") == null) {
+      d.properties.each { log.warn it }
+    }
+    if (DEVICE_TYPES[d.getDataValue("kind")].dingable) {
+      state.dingables << d.getDataValue("device_id")
+    }
+  }
+
+  pollDings()
 
 }
+
+def pollDings() {
+  simpleRequest("dings")
+  if (dingPolling) {
+    runIn(dingInterval, pollDings)
+  }
+}
+
 
 private getRING_API_DNI() {
   return "WS_API_DNI"
@@ -436,13 +525,19 @@ private getRING_API_DNI() {
 
 private getDEVICE_TYPES() {
   return [
-    "hp_cam_v1": [name: "Ring Floodlight Cam", driver: "Ring Generic Light with Siren"],
-    "hp_cam_v2": [name: "Ring Spotlight Cam Wired", driver: "Ring Generic Light with Siren"],
-    "stickup_cam_v4": [name: "Ring Spotlight Cam Battery", driver: "Ring Generic Light"],
-    "chime_pro": [name: "Ring Chime Pro", driver: "Ring Generic Chime"],
-    "chime": [name: "Ring Chime", driver: "Ring Generic Chime"],
-    "base_station_v1": [name: "Ring Alarm (API Device)", driver: "Ring API Virtual Device"],
-    "beams_bridge_v1": [name: "Ring Bridge (API Device)", driver: "Ring API Virtual Device"]
+    "hp_cam_v1": [name: "Ring Floodlight Cam", driver: "Ring Generic Light with Siren", dingable: true],
+    "hp_cam_v2": [name: "Ring Spotlight Cam Wired", driver: "Ring Generic Light with Siren", dingable: true],
+    "stickup_cam_v4": [name: "Ring Spotlight Cam Battery", driver: "Ring Generic Light", dingable: true],
+    "stickup_cam_lunar": [name: "Ring Stick Up Cam Battery", driver: "Ring Generic Camera with Siren", dingable: true],
+    "stickup_cam_elite": [name: "Ring Stick Up Cam Wired", driver: "Ring Generic Camera with Siren", dingable: true],
+    "stickup_cam_mini": [name: "Ring Indoor Cam", driver: "Ring Generic Camera with Siren", dingable: true],
+    "lpd_v1": [name: "Ring Video Doorbell Pro", driver: "Ring Generic Camera", dingable: true],
+    "jbox_v1": [name: "Ring Video Doorbell Elite", driver: "Ring Generic Camera", dingable: true],
+    "chime": [name: "Ring Chime", driver: "Ring Generic Chime", dingable: false],
+    "chime_pro": [name: "Ring Chime Pro", driver: "Ring Generic Chime", dingable: false],
+    "base_station_v1": [name: "Ring Alarm (API Device)", driver: "Ring API Virtual Device", dingable: false],
+    "beams_bridge_v1": [name: "Ring Bridge (API Device)", driver: "Ring API Virtual Device", dingable: false]
+
   ]
 }
 
@@ -487,17 +582,15 @@ private getRequests(parts) {
         path: "/oauth/token",
         //requestContentType: "application/json",
         contentType: "application/json",
-        body: [
+        body: parts.grantData != null ? ([
           "client_id": "ring_official_android",
-          "grant_type": "password",
-          "password": "${password}",
-          "scope": "client",
-          "username": "${username}"
-        ]
+          "scope": "client"
+        ] << parts.grantData) : null
       ],
       headers: [
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36"
-      ]
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36",
+        "hardware_id": state.appDeviceId
+      ] << (parts.twoFactorCode != null ? ['2fa-support': 'true', '2fa-code': parts.twoFactorCode] : [:])
     ],
     "session": [
       method: POST,
@@ -550,6 +643,16 @@ private getRequests(parts) {
         contentType: JSON
       ]
     ],
+    "dings": [
+      method: GET,
+      synchronous: false,
+      type: "bearer",
+      params: [
+        uri: "https://api.ring.com",
+        path: "/clients_api/dings/active",
+        contentType: JSON
+      ]
+    ],
     "device-control": [
       method: POST,
       type: "token",
@@ -584,6 +687,7 @@ private getRequests(parts) {
       ],
       query: ["locationID": "${selectedLocations}"]
     ],
+    /*
     "refresh-device": [
       method: GET,
       params: [
@@ -591,7 +695,7 @@ private getRequests(parts) {
         path: "/clients_api/ring_devices/${getRingDeviceId(parts.dni)}",
         contentType: JSON
       ]
-    ],
+    ],*/
     "refresh-security-device": [
       method: GET,
       params: [
@@ -665,13 +769,41 @@ def parse(String description) {
   log.error "Parse?"
 }
 
-def authenticate() {
+def authenticate(twoFactorCode) {
+  logTrace "authenticate($twoFactorCode)"
   if (!state.appDeviceId) {
     generateAppDeviceId()
   }
-  simpleRequest("auth")
-  simpleRequest("session")
-  return state.authentication_token
+
+  def data = [grantData: getGrantData(twoFactorCode), twoFactorCode: twoFactorCode]
+  logTrace "data: ${data}"
+  def result = simpleRequest("auth", data)
+  if (result == "challenge") {
+    return result
+  }
+  if (result) {
+    simpleRequest("session")
+    return state.authentication_token
+  }
+}
+
+private getGrantData(twoFactorCode) {
+  if (state.refresh_token && !twoFactorCode) {
+    return [
+      "grant_type": 'refresh_token',
+      "refresh_token": state.refresh_token
+    ]
+  }
+
+  if (!twofactor || (twofactor && !state.refresh_token)) {
+    return [
+      "grant_type": 'password',
+      "password": "${password}",
+      "username": "${username}"
+    ]
+  }
+
+  log.error 'Refresh token is not valid.  Unable to authenticate with Ring servers.'
 }
 
 def simpleRequest(type, data = [:]) {
@@ -741,17 +873,29 @@ def doSynchronousAction(type, method, params) {
     }
   }
   catch (ex) {
-    logTrace "ex: ${ex}"
+    logTrace "ex: ${ex} ${ex != null ? ex.getStatusCode() : ''}"
     if (ex instanceof groovyx.net.http.HttpResponseException && ex.getStatusCode() == 401 && !(method in ["auth", "session"])) {
       logInfo "Not authenticated!"
       state.access_token = "EMPTY"
       state.authentication_token = "EMPTY"
-      if (authenticate()) {
-        return simpleRequest(method)
-      }
+      //state.refresh_token = null
+      //TMP
+      //if (authenticate()) {
+      //  return simpleRequest(method)
+      //}
+    }
+    if (ex instanceof groovyx.net.http.HttpResponseException && ex.getStatusCode() == 412 && (method in ["auth", "session"])) {
+      logInfo "2 Step Challenge"
+      state.access_token = "EMPTY"
+      state.authentication_token = "EMPTY"
+      state.refresh_token = null
+      return "challenge"
     }
     else if (method == "auth") {
       log.warn "Username and password incorrect!"
+      state.access_token = "EMPTY"
+      state.authentication_token = "EMPTY"
+      state.refresh_token = null
     }
     else if (method == "session") {
       log.warn "What goes on here?"
@@ -770,6 +914,7 @@ def responseHandler(response, params) {
     logInfo "Not authenticated!"
     state.access_token = "EMPTY"
     state.authentication_token = "EMPTY"
+    //TMP
     if (authenticate()) {
       simpleRequest(params.method, params.data)
     }
@@ -780,7 +925,8 @@ def responseHandler(response, params) {
       state.access_token = response.data.access_token
       state.refresh_token = response.data.refresh_token
       logDebug "access token: ${state.access_token}"
-      return state.access_token && state.access_token != "EMPTY"
+      logDebug "refresh token: ${state.refresh_token}"
+      return state.access_token && state.access_token != "EMPTY" && state.refresh_token
     }
     else if (params.method == "session") {
       state.authentication_token = response?.data?.profile.authentication_token
@@ -792,6 +938,7 @@ def responseHandler(response, params) {
     }
     else if (params.method == "devices") {
       def body = response.data
+      body.doorbots.each { body.stickup_cams << it }
       body.chimes.each { body.stickup_cams << it }
       body.base_stations.each { body.stickup_cams << it }
       body.beams_bridges.each { body.stickup_cams << it }
@@ -831,6 +978,17 @@ def responseHandler(response, params) {
         log.info "Subscribed to push notifications (except it doesn't work for now because of whitelist)"
       }
     }
+    else if (params.method == "dings") {
+      def body = response.getJson()
+      logTrace "body: ${JsonOutput.prettyPrint(JsonOutput.toJson(body))}"
+      state.dingables.each { deviceId ->
+        def dingInfo = body.find { it.doorbot_id.toString() == deviceId.toString() }
+        if (dingInfo) {
+          logTrace "Device ${getFormattedDNI(deviceId)} has dingInfo ${dingInfo}"
+        }
+        getChildDevice(getFormattedDNI(deviceId))?.childParse(params.method, [response: response.getStatus(), msg: dingInfo])
+      }
+    }
     else {
       log.error "Unhandled method!"
       response.properties.each { log.warn it }
@@ -843,6 +1001,8 @@ def responseHandler(response, params) {
 }
 
 def loggedIn() {
+  logDebug "loggedIn()"
+  logTrace "state.authentication_token ${state.authentication_token}"
   return state.authentication_token && state.authentication_token != "EMPTY"
 }
 
