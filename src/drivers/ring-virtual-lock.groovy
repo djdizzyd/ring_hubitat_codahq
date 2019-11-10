@@ -54,11 +54,13 @@ def refresh() {
 
 def lock() {
   logDebug "lock()"
-  parent.simpleRequest("setcommand", [type: "lock.lock", zid: device.getDataValue("zid"), dst: device.getDataValue("dst"), data: {}])
+  parent.simpleRequest("setcommand", [type: "lock.lock", zid: device.getDataValue("zid"), dst: device.getDataValue("dst"), data: {
+  }])
 }
 
 def unlock() {
-  parent.simpleRequest("setcommand", [type: "lock.unlock", zid: device.getDataValue("zid"), dst: device.getDataValue("dst"), data: {}])
+  parent.simpleRequest("setcommand", [type: "lock.unlock", zid: device.getDataValue("zid"), dst: device.getDataValue("dst"), data: {
+  }])
 }
 
 def setValues(deviceInfo) {

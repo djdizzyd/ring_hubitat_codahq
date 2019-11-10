@@ -102,12 +102,14 @@ def off() {
   def alarm = device.currentValue("alarm")
   logTrace "previous value alarm: $alarm"
   //sendEvent(name: "alarm", value: "off")
-  parent.simpleRequest("setcommand", [type: "security-panel.silence-siren", zid: device.getDataValue("security-panel-zid"), dst: device.getDataValue("src"), data: {}])
+  parent.simpleRequest("setcommand", [type: "security-panel.silence-siren", zid: device.getDataValue("security-panel-zid"), dst: device.getDataValue("src"), data: {
+  }])
 }
 
 def siren() {
   logDebug "Attempting to turn on siren."
-  parent.simpleRequest("setcommand", [type: "security-panel.sound-siren", zid: device.getDataValue("security-panel-zid"), dst: device.getDataValue("src"), data: {}])
+  parent.simpleRequest("setcommand", [type: "security-panel.sound-siren", zid: device.getDataValue("security-panel-zid"), dst: device.getDataValue("src"), data: {
+  }])
 }
 
 def strobe() {
@@ -126,7 +128,8 @@ def sirenTest() {
     return
   }
   //siren-test.stop to cancel
-  parent.simpleRequest("setcommand", [type: "siren-test.start", zid: device.getDataValue("security-panel-zid"), dst: null, data: {}])
+  parent.simpleRequest("setcommand", [type: "siren-test.start", zid: device.getDataValue("security-panel-zid"), dst: null, data: {
+  }])
 }
 /*alarm capabilities end*/
 
