@@ -28,8 +28,10 @@ metadata {
     capability "Refresh"
     capability "Polling"
     capability "Alarm"
+    capability "MotionSensor"
 
     command "alarmOff"
+    command "getDings"
   }
 
   // simulator metadata
@@ -46,6 +48,8 @@ metadata {
     details "button"
   }
   preferences {
+    input name: "lightPolling", type: "bool", title: "Enable polling for light status on this device", defaultValue: false
+    input name: "lightInterval", type: "number", range: 10..600, title: "Number of seconds in between light polls", defaultValue: 15
     input name: "strobeTimeout", type: "enum", title: "Strobe Timeout", options: [[30: "30s"], [60: "1m"], [120: "2m"], [180: "3m"]], defaultValue: 30
     input name: "strobeRate", type: "enum", title: "Strobe rate", options: [[1000: "1s"], [2000: "2s"], [5000: "5s"]], defaultValue: 1000
     input name: "descriptionTextEnable", type: "bool", title: "Enable descriptionText logging", defaultValue: false
@@ -81,6 +85,30 @@ def poll() {
 def refresh() {
   logDebug "refresh()"
   parent.simpleRequest("refresh", [dni: device.deviceNetworkId])
+}
+
+def getDings() {
+  logDebug "getDings()"
+  parent.simpleRequest("dings")
+}
+
+def setupPolling() {
+  unschedule()
+  if (lightPolling) {
+    pollLight()
+  }
+}
+
+def pollLight() {
+  logTrace "pollLight()"
+  refresh()
+  if (pollLight) {
+    runIn(lightInterval, pollLight)  //time in seconds
+  }
+}
+
+def updated() {
+  setupPolling()
 }
 
 def on() {
@@ -162,6 +190,10 @@ def childParse(type, params) {
     logTrace "set"
     handleSet(type, params)
   }
+  else if (type == "dings") {
+    logTrace "dings"
+    handleDings(params.msg)
+  }
   else {
     log.error "Unhandled type ${type}"
   }
@@ -217,6 +249,16 @@ private handleSet(id, params) {
     log.error "Unsupported set ${params.action}"
   }
 
+}
+
+private handleDings(json) {
+  logTrace "json: ${json}"
+  if (json == null) {
+    checkChanged("motion", "inactive")
+  }
+  else if (json.kind == "motion" && json.motion == true) {
+    checkChanged("motion", "active")
+  }
 }
 
 def checkChanged(attribute, newStatus) {

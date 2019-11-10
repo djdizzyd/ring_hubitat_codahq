@@ -27,6 +27,7 @@ metadata {
     capability "Sensor"
     capability "Refresh"
     capability "Polling"
+    capability "MotionSensor"
   }
 
   // simulator metadata
@@ -43,10 +44,20 @@ metadata {
     details "button"
   }
   preferences {
+    input name: "pollLight", type: "bool", title: "Enable polling for light status on this device", defaultValue: false
+    input name: "pollDings", type: "bool", title: "Enable polling for rings and motion on this device", defaultValue: false
     input name: "descriptionTextEnable", type: "bool", title: "Enable descriptionText logging", defaultValue: false
     input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: false
     input name: "traceLogEnable", type: "bool", title: "Enable trace logging", defaultValue: false
   }
+}
+
+def canPollLight() {
+  return pollLight
+}
+
+def canPollDings() {
+  return pollDings
 }
 
 private logInfo(msg) {
@@ -101,6 +112,10 @@ def childParse(type, params) {
     logTrace "set"
     handleSet(type, params)
   }
+  else if (type == "dings") {
+    logTrace "dings"
+    handleDings(params.msg)
+  }
   else {
     log.error "Unhandled type ${type}"
   }
@@ -137,6 +152,16 @@ private handleSet(id, params) {
   }
   else {
     log.error "Unsupported set ${params.action}"
+  }
+}
+
+private handleDings(json) {
+  logTrace "json: ${json}"
+  if (json == null) {
+    checkChanged("motion", "inactive")
+  }
+  else if (json.kind == "motion" && json.motion == true) {
+    checkChanged("motion", "active")
   }
 }
 
