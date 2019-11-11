@@ -1,8 +1,8 @@
-**[u]Notice!!![/u]** 
+**Notice!!!** 
 
-First and foremost I need to warn any who venture to use this integration.  This integration is provided for fun without hope of warranty or safety or stable or permanent use. Ring are not official partners with Hubitat or myself and all of the interactions between the Hubitat hub and Ring's cloud servers in this ingration are via the private API calls that Ring does not publish or give permission to use for this purpose. I wrote this integration for fun and I do not trust it with my safety. It's a hobby project. (That said, it is well built and mostly stable. On the hubitat side the hub slows down sometimes and drops the websocket connection but there is a watchdog that starts it back up.)
+First and foremost I need to warn any who venture to use this integration.  This integration is provided for fun without hope of warranty or safety or stable or permanent use. Ring are not official partners with Hubitat or myself and all of the interactions between the Hubitat hub and Ring's cloud servers in this integration are via the private API calls that Ring does not publish or give permission to use for this purpose. I wrote this integration for fun and I do not trust it with my safety. It's a hobby project. (That said, it is well built and mostly stable. On the hubitat side the hub slows down sometimes and drops the websocket connection but there is a watchdog that starts it back up.)
 
-If some part of this integration does not work now or stops working in the future I make no gaurantees and this is provided without hope of service or warranty.  If you use this integration you agree to hold me unresponsible for what may happen to your Ring account in the event that Ring deems this type of usage of the API unreasonable.  You agree to hold me unresponsible for what may happen to your home, personal property, self, family, etc.  You agree to hold me unresponsible.  End of story.
+If some part of this integration does not work now or stops working in the future I make no gaurantees and this is provided "AS IS" without hope of service or warranty.  If you use this integration you agree to hold me unresponsible for what may happen to your Ring account in the event that Ring deems this type of usage of the API unreasonable.  You agree to hold me unresponsible for what may happen to your home, personal property, self, family, etc.  You agree to hold me unresponsible.  End of story.
 
 If that sounds okay then continue onwards...
 
@@ -62,4 +62,3 @@ IF YOU NEED SUPPORT DO NOT OPEN AN ISSUE ON GITHUB.  Issues are for code problem
 The repository:
 https://github.com/codahq/ring_hubitat_codahq
 
- 
