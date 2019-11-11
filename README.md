@@ -55,20 +55,11 @@ Children of the Ring API Virtual Device (websocket device)
 - [ring-virtual-beams-light.groovy](https://github.com/codahq/ring_hubitat_codahq/blob/master/src/drivers/ring-virtual-beams-light.groovy) - Smart Lighting Light with Motion Sensor
 - [ring-virtual-beams-motion-sensor.groovy](https://github.com/codahq/ring_hubitat_codahq/blob/master/src/drivers/ring-virtual-beams-motion-sensor.groovy) - Smart Lighting Motion Sensor
 
-The app will create the camera, chime and doorbell devices automatically.  However, for testing reasons (and some level of control over what devices are installed) the security and beams devices are NOT created automatically.  Once you add the "Ring API Virtual Device" you must go and click install devices on your respective device to get its websocket children device to create.  
+The app will create the camera, chime and doorbell devices automatically.  However, for testing reasons (and some level of control over what devices are installed) the security and beams devices are NOT created automatically.  Once you add the "Ring API Virtual Device" you must go and click install devices on your respective device to get its websocket children device(s) to create.  
 
-IF YOU NEED SUPPORT DO NOT OPEN AN ISSUE ON GITHUB.  Issues are for code problems aka bugs.  If you have an issue please make a post here in [this](https://community.hubitat.com/t/release-ring-integration/26423) thread.
+IF YOU NEED SUPPORT DO NOT OPEN AN ISSUE ON GITHUB.  Issues are for code problems aka bugs.  If you have a support issue please make a post here in [this](https://community.hubitat.com/t/release-ring-integration/26423) thread.
 
 The repository:
 https://github.com/codahq/ring_hubitat_codahq
 
  
->
-*Original post:
-I have written a native integration for Ring.  It supports light and siren control of cameras with lights.  It fully supports chimes.  It fully supports the alarm and most of its devices.  It fully supports the Beams bridge and most of its devices.  
-
-The integration doesn't poll for status so cameras and doorbells with motion sensors don't support motion.  However, lights and security devices (anything over the websocket) do support motion.
-
-If I can point you to a repository and you do everything from there to install apps and drivers and would like to test this out let me know.  I only need a few volunteers.  If you aren't capable of being very self-sufficient in setup you'll have to wait until this has been tested and I release it publicly.
-
-Post here if you would like to participate.  I need at least 1 tester with an alarm and 1 tester with a Beams bridge.  Maybe a tester with a chime or two.
