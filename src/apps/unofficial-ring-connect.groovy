@@ -18,6 +18,7 @@
  *  2019-11-10: -2FA Support
  *              -Polling for dings
  *              -New devices
+ *  2019-11-11: -Mappings for more devices to existing drivers
  *
  */
 
@@ -536,7 +537,7 @@ private getDEVICE_TYPES() {
     "stickup_cam_elite": [name: "Ring Stick Up Cam Wired", driver: "Ring Generic Camera with Siren", dingable: true],
     "stickup_cam_mini": [name: "Ring Indoor Cam", driver: "Ring Generic Camera with Siren", dingable: true],
     "doorbell_v3": [name: "Ring Video Doorbell", driver: "Ring Generic Camera", dingable: true],
-	  "doorbell_v4": [name: "Ring Video Doorbell Pro", driver: "Ring Generic Camera", dingable: true],
+    "doorbell_v4": [name: "Ring Video Doorbell Pro", driver: "Ring Generic Camera", dingable: true],
     "lpd_v1": [name: "Ring Video Doorbell Pro", driver: "Ring Generic Camera", dingable: true],
     "lpd_v2": [name: "Ring Video Doorbell Pro 2", driver: "Ring Generic Camera", dingable: true],
     "jbox_v1": [name: "Ring Video Doorbell Elite", driver: "Ring Generic Camera", dingable: true],
