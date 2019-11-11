@@ -528,12 +528,15 @@ private getRING_API_DNI() {
 
 private getDEVICE_TYPES() {
   return [
+
     "hp_cam_v1": [name: "Ring Floodlight Cam", driver: "Ring Generic Light with Siren", dingable: true],
     "hp_cam_v2": [name: "Ring Spotlight Cam Wired", driver: "Ring Generic Light with Siren", dingable: true],
     "stickup_cam_v4": [name: "Ring Spotlight Cam Battery", driver: "Ring Generic Light", dingable: true],
     "stickup_cam_lunar": [name: "Ring Stick Up Cam Battery", driver: "Ring Generic Camera with Siren", dingable: true],
     "stickup_cam_elite": [name: "Ring Stick Up Cam Wired", driver: "Ring Generic Camera with Siren", dingable: true],
     "stickup_cam_mini": [name: "Ring Indoor Cam", driver: "Ring Generic Camera with Siren", dingable: true],
+    "doorbell_v3": [name: "Ring Video Doorbell", driver: "Ring Generic Camera", dingable: true],
+	  "doorbell_v4": [name: "Ring Video Doorbell Pro", driver: "Ring Generic Camera", dingable: true],
     "lpd_v1": [name: "Ring Video Doorbell Pro", driver: "Ring Generic Camera", dingable: true],
     "lpd_v2": [name: "Ring Video Doorbell Pro 2", driver: "Ring Generic Camera", dingable: true],
     "jbox_v1": [name: "Ring Video Doorbell Elite", driver: "Ring Generic Camera", dingable: true],
