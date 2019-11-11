@@ -22,8 +22,8 @@ The app can interact directly with the non-websocket devices. The driver for the
         websocket                cameras/chimes/doorbells
           device
   /                \
-security          beams 
-devices          devices
+ security          beams 
+ devices          devices
 
 
 Before you install any classic HTTP devices know that since we are not Ring partners we cannot get motion and ring notifications.  Because of this I poll for them.  Yes, this is horrible and for that reason I do not poll myself.  (I have separate devices and I use the SmartThings integration with hublink).  However, I added this functionality because it seems to work for the home bridge project.  AND...  I know that I will spend forever explaining why I didn't add it because of that.  Now I will probably just spend forever explaining why you can't poll more often for dings...  I also added the ability for each light device to poll for its light status.  I also don't use this.  I use these devices for control.  I do not use them for status.  I don't ever need to know their status.
