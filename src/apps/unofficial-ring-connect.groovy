@@ -535,6 +535,7 @@ private getDEVICE_TYPES() {
     "stickup_cam_elite": [name: "Ring Stick Up Cam Wired", driver: "Ring Generic Camera with Siren", dingable: true],
     "stickup_cam_mini": [name: "Ring Indoor Cam", driver: "Ring Generic Camera with Siren", dingable: true],
     "lpd_v1": [name: "Ring Video Doorbell Pro", driver: "Ring Generic Camera", dingable: true],
+    "lpd_v2": [name: "Ring Video Doorbell Pro 2", driver: "Ring Generic Camera", dingable: true],
     "jbox_v1": [name: "Ring Video Doorbell Elite", driver: "Ring Generic Camera", dingable: true],
     "chime": [name: "Ring Chime", driver: "Ring Generic Chime", dingable: false],
     "chime_pro": [name: "Ring Chime Pro", driver: "Ring Generic Chime", dingable: false],
