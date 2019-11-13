@@ -864,7 +864,7 @@ def formatParams(request, type, data) {
 }
 
 def doAction(type, method, params, data) {
-  logDebug "doAction(type, method, params, data)"
+  logDebug "doAction($type, $method, params, data)"
   try {
     "async${type}"("responseHandler", params, [method: method, data: data])
   }
