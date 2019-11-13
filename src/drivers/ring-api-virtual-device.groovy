@@ -717,6 +717,8 @@ private getDEVICE_TYPES() {
     "lock": [name: "Ring Virtual Lock", hidden: false],
     "security-keypad": [name: "Ring Virtual Keypad", hidden: false],
     "base_station_v1": [name: "Ring Alarm Hub", hidden: false],
+    "siren": [name: "Ring Virtual Siren", hidden: false],
+    "switch": [name: "Ring Virtual Switch", hidden: false],
     //virtual alarm devices
     "adapter.zwave": [name: "Ring Z-Wave Adapter", hidden: true],
     "adapter.zigbee": [name: "Ring Zigbee Adapter", hidden: true],
