@@ -29,7 +29,7 @@ Before you install any classic HTTP devices know that since we are not Ring part
 
 I also added the ability for each light device to poll for its light status.  I also don't use this.  I use these devices for control.  I do not use them for status.  I don't ever need to know their status therefore I don't care what it is and I don't poll for status.
 
-You do NOT need to install all of the devices in this repository.  You should be able to get away with installing the drivers for just the devices you own and have registered.  Here are the device to driver mappings roughly:
+You do NOT need to install all of the device drivers in this repository.  You should be able to get away with installing the drivers for just the devices you own and have registered.  Here are the device to driver mappings roughly:
 
 The app
 - [unofficial-ring-connect.groovy](https://github.com/codahq/ring_hubitat_codahq/blob/master/src/apps/unofficial-ring-connect.groovy) - Required for all.  (does authentication and communication)
