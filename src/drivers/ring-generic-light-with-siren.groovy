@@ -15,13 +15,15 @@
  *
  *  Change Log:
  *  2019-03-02: Initial
+ *  2019-11-15: Import URL
  *
  */
 
 import groovy.json.JsonSlurper
 
 metadata {
-  definition(name: "Ring Generic Light with Siren", namespace: "codahq-hubitat", author: "Ben Rimmasch") {
+  definition(name: "Ring Generic Light with Siren", namespace: "codahq-hubitat", author: "Ben Rimmasch",
+    importUrl: "https://raw.githubusercontent.com/codahq/ring_hubitat_codahq/master/src/drivers/ring-generic-light-with-siren.groovy") {
     capability "Actuator"
     capability "Switch"
     capability "Sensor"
@@ -192,7 +194,7 @@ def childParse(type, params) {
   }
   else if (type == "dings") {
     logTrace "dings"
-    handleDings(params.msg)
+    handleDings(params.type, params.msg)
   }
   else {
     log.error "Unhandled type ${type}"
@@ -209,13 +211,15 @@ private handleRefresh(json) {
   if (json.led_status) {
     checkChanged("switch", json.led_status)
   }
-
   if (json.siren_status?.seconds_remaining && json.siren_status.seconds_remaining > 0) {
     def value = json.siren_status.seconds_remaining > 0 ? "siren" : "off"
     checkChanged("alarm", value)
     if (value == "siren") {
       runIn(json.siren_status.seconds_remaining + 1, refresh)
     }
+  }
+  if (json.firmware_version && device.getDataValue("firmware") != json.firmware_version) {
+    device.updateDataValue("firmware", json.firmware_version)
   }
 }
 
@@ -251,14 +255,24 @@ private handleSet(id, params) {
 
 }
 
-private handleDings(json) {
+private handleDings(type, json) {
   logTrace "json: ${json}"
   if (json == null) {
     checkChanged("motion", "inactive")
   }
   else if (json.kind == "motion" && json.motion == true) {
     checkChanged("motion", "active")
+    unschedule(motionOff)
   }
+  if (type == "IFTTT") {
+    def motionTimeout = 60
+    runIn(motionTimeout, motionOff)
+  }
+}
+
+def motionOff(data) {
+  logDebug "motionOff($data)"
+  childParse("dings", [msg: null])
 }
 
 def checkChanged(attribute, newStatus) {
