@@ -15,19 +15,23 @@
  *
  *  Change Log:
  *  2019-03-02: Initial
+ *  2019-11-15: Import URL
  *
  */
 
 import groovy.json.JsonSlurper
 
 metadata {
-  definition(name: "Ring Generic Light", namespace: "codahq-hubitat", author: "Ben Rimmasch") {
+  definition(name: "Ring Generic Light", namespace: "codahq-hubitat", author: "Ben Rimmasch",
+    importUrl: "https://raw.githubusercontent.com/codahq/ring_hubitat_codahq/master/src/drivers/ring-generic-light.groovy") {
     capability "Actuator"
     capability "Switch"
     capability "Sensor"
     capability "Refresh"
     capability "Polling"
     capability "MotionSensor"
+
+    command "getDings"
   }
 
   // simulator metadata
@@ -89,6 +93,11 @@ def refresh() {
   parent.simpleRequest("refresh", [dni: device.deviceNetworkId])
 }
 
+def getDings() {
+  logDebug "getDings()"
+  parent.simpleRequest("dings")
+}
+
 def on() {
   logDebug "Attempting to switch on."
   parent.simpleRequest("device-set", [dni: device.deviceNetworkId, kind: "doorbots", action: "floodlight_light_on"])
@@ -114,7 +123,7 @@ def childParse(type, params) {
   }
   else if (type == "dings") {
     logTrace "dings"
-    handleDings(params.msg)
+    handleDings(params.type, params.msg)
   }
   else {
     log.error "Unhandled type ${type}"
@@ -133,6 +142,9 @@ private handleRefresh(json) {
   }
   else if (json.led_status) {
     checkChanged("switch", json.led_status)
+  }
+  if (json.firmware_version && device.getDataValue("firmware") != json.firmware_version) {
+    device.updateDataValue("firmware", json.firmware_version)
   }
 }
 
@@ -155,14 +167,24 @@ private handleSet(id, params) {
   }
 }
 
-private handleDings(json) {
+private handleDings(type, json) {
   logTrace "json: ${json}"
   if (json == null) {
     checkChanged("motion", "inactive")
   }
   else if (json.kind == "motion" && json.motion == true) {
     checkChanged("motion", "active")
+    unschedule(motionOff)
   }
+  if (type == "IFTTT") {
+    def motionTimeout = 60
+    runIn(motionTimeout, motionOff)
+  }
+}
+
+def motionOff(data) {
+  logDebug "motionOff($data)"
+  childParse("dings", [msg: null])
 }
 
 def checkChanged(attribute, newStatus) {
