@@ -15,19 +15,23 @@
  *
  *  Change Log:
  *  2019-11-09: Initial
+ *  2019-11-13: Added battery level support
+ *  2019-11-15: Import URL
  *
  */
 
 import groovy.json.JsonSlurper
 
 metadata {
-  definition(name: "Ring Generic Camera with Siren", namespace: "codahq-hubitat", author: "Ben Rimmasch") {
+  definition(name: "Ring Generic Camera with Siren", namespace: "codahq-hubitat", author: "Ben Rimmasch",
+    importUrl: "https://raw.githubusercontent.com/codahq/ring_hubitat_codahq/master/src/drivers/ring-generic-camera-with-siren.groovy") {
     capability "Actuator"
     capability "Sensor"
     capability "Refresh"
     capability "Polling"
     capability "Alarm"
     capability "MotionSensor"
+    capability "Battery"
 
     command "getDings"
   }
@@ -119,7 +123,7 @@ def childParse(type, params) {
   }
   else if (type == "dings") {
     logTrace "dings"
-    handleDings(params.msg)
+    handleDings(params.type, params.msg)
   }
   else {
     log.error "Unhandled type ${type}"
@@ -129,12 +133,18 @@ def childParse(type, params) {
 private handleRefresh(json) {
   logDebug "handleRefresh(${json.description})"
 
+  if (json.battery_life != null) {
+    checkChanged("battery", json.battery_life)
+  }
   if (json.siren_status?.seconds_remaining != null) {
     def value = json.siren_status.seconds_remaining > 0 ? "siren" : "off"
     checkChanged("alarm", value)
     if (value == "siren") {
       runIn(json.siren_status.seconds_remaining + 1, refresh)
     }
+  }
+  if (json.firmware_version && device.getDataValue("firmware") != json.firmware_version) {
+    device.updateDataValue("firmware", json.firmware_version)
   }
 }
 
@@ -162,14 +172,24 @@ private handleSet(id, params) {
 
 }
 
-private handleDings(json) {
+private handleDings(type, json) {
   logTrace "json: ${json}"
   if (json == null) {
     checkChanged("motion", "inactive")
   }
   else if (json.kind == "motion" && json.motion == true) {
     checkChanged("motion", "active")
+    unschedule(motionOff)
   }
+  if (type == "IFTTT") {
+    def motionTimeout = 60
+    runIn(motionTimeout, motionOff)
+  }
+}
+
+def motionOff(data) {
+  logDebug "motionOff($data)"
+  childParse("dings", [msg: null])
 }
 
 def checkChanged(attribute, newStatus) {
