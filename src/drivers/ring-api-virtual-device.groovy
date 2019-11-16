@@ -15,6 +15,7 @@
  *
  *  Change Log:
  *  2019-03-24: Initial
+ *  2019-11-15: Import URL
  *
  */
 
@@ -24,7 +25,8 @@ import hubitat.helper.InterfaceUtils
 
 metadata {
   definition(name: "Ring API Virtual Device", namespace: "codahq-hubitat", author: "Ben Rimmasch",
-    description: "This device holds the websocket connection that controls the alarm hub and/or the lighting bridge") {
+    description: "This device holds the websocket connection that controls the alarm hub and/or the lighting bridge",
+    importUrl: "https://raw.githubusercontent.com/codahq/ring_hubitat_codahq/master/src/drivers/ring-api-virtual-device.groovy") {
     capability "Actuator"
     capability "Initialize"
     capability "Refresh"
