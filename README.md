@@ -25,9 +25,9 @@ The app can interact directly with the non-websocket devices. The driver for the
      devices          devices
 
 
-Before you install any classic HTTP devices know that since we are not Ring partners we cannot get motion and ring notifications pushed to us.  Because of this I poll for them.  Yes, this is horrible and for that reason I do not poll myself.  (I have separate devices and I use the SmartThings integration with hublink).  However, I added this functionality because it seems to work for the home bridge project.  AND...  I know that I will spend forever explaining why I didn't add it if I don't.  Now I will probably just spend forever explaining why you can't poll more often for dings or dings are missed...  
+Before you install any classic HTTP devices know that since we are not Ring partners we cannot get motion and ring notifications pushed to us.  Because of this you have three options.  One option is to poll for them.  Yes, this is horrible and for that reason I do not poll myself.  However, I added this functionality because it seems to work for the home bridge project.  AND...  I know that I will spend forever explaining why I didn't add it if I don't.  Now I will probably just spend forever explaining why you can't poll more often for dings or dings are missed...  Option two is to setup IFTTT applets for each motion type (ring or motion) for each device.  There is fairly robust documentation for how to do this within the app so I will only cover it briefly here.  You must enable OAuth on the app and authorize Ring to IFTTT.  Then you create applets on Ring events that call into the "Unofficial Ring Connect" app using an OAuth token by way of web service calls from the "Webhooks" IFTTT service.  If it sounds complicated, don't worry.  After you install the app you can navigate through to the IFTTT page and learn more.  Finally, the third option is to use SmartThings and the hublink app and have separate devices for status.  (I have separate devices and I use the SmartThings integration with hublink).
 
-I also added the ability for each light device to poll for its light status.  I also don't use this.  I use these devices for control.  I do not use them for status.  I don't ever need to know their status therefore I don't care what it is and I don't poll for status.
+I also added the ability for each light device to poll for its light status.  I don't use this either.  I use these devices for control.  I do not use them for status.  I don't ever need to know their light status therefore I don't care what it is and I don't poll for light status.
 
 You do NOT need to install all of the device drivers in this repository.  You should be able to get away with installing the drivers for just the devices you own and have registered.  Here are the device to driver mappings roughly:
 
@@ -38,7 +38,7 @@ Children of the app
 - [ring-api-virtual-device.groovy](https://github.com/codahq/ring_hubitat_codahq/blob/master/src/drivers/ring-api-virtual-device.groovy) - This is the "Ring API Virtual Device" or websocket device. Required if you have a Ring Alarm hub or a Ring Beams (Smart Lighting) bridge
 - [ring-generic-chime.groovy](https://github.com/codahq/ring_hubitat_codahq/blob/master/src/drivers/ring-generic-chime.groovy) - Chime or Chime Pro
 - [ring-generic-light-with-siren.groovy](https://github.com/codahq/ring_hubitat_codahq/blob/master/src/drivers/ring-generic-light-with-siren.groovy) - Floodlight Cam, Stickup Cam Wired, Spotlight Cam Wired
--  [ring-generic-light.groovy](https://github.com/codahq/ring_hubitat_codahq/blob/master/src/drivers/ring-generic-light.groovy) - Spotlight Cam Battery (A few devices where the siren call is different and I haven't reverse engineered it yet.)
+- [ring-generic-light.groovy](https://github.com/codahq/ring_hubitat_codahq/blob/master/src/drivers/ring-generic-light.groovy) - Spotlight Cam Battery (A few devices where the siren call is different and I haven't reverse engineered it yet.)
 - [ring-generic-camera-with-siren.groovy](https://github.com/codahq/ring_hubitat_codahq/blob/master/src/drivers/ring-generic-camera-with-siren.groovy) - Indoor Cam, Stick Up Cam
 - [ring-generic-camera.groovy](https://github.com/codahq/ring_hubitat_codahq/blob/master/src/drivers/ring-generic-camera.groovy) - Doorbells
 
@@ -49,15 +49,19 @@ Children of the Ring API Virtual Device (websocket device)
 - [ring-virtual-contact-sensor.groovy](https://github.com/codahq/ring_hubitat_codahq/blob/master/src/drivers/ring-virtual-contact-sensor.groovy) - Ring Alarm Contact Sensor
 - [ring-virtual-motion-sensor.groovy](https://github.com/codahq/ring_hubitat_codahq/blob/master/src/drivers/ring-virtual-motion-sensor.groovy) - Ring Alarm Motion Sensor
 - [ring-virtual-keypad.groovy](https://github.com/codahq/ring_hubitat_codahq/blob/master/src/drivers/ring-virtual-keypad.groovy) - Ring Alarm Keypad
-- [ring-virtual-lock.groovy](https://github.com/codahq/ring_hubitat_codahq/blob/master/src/drivers/ring-virtual-lock.groovy) - Any Z-Wave lock that connects to Ring Alarm (I think)
-- [ring-virtual-beams-bridge.groovy](https://github.com/codahq/ring_hubitat_codahq/blob/master/src/drivers/ring-virtual-beams-bridge.groovy) - Smart Lighting (Beams) bridge.  Not required but it should keep the log quiet
+- [ring-virtual-lock.groovy](https://github.com/codahq/ring_hubitat_codahq/blob/master/src/drivers/ring-virtual-lock.groovy) - Any Z-Wave lock that connects to Ring Alarm
+- [ring-virtual-beams-bridge.groovy](https://github.com/codahq/ring_hubitat_codahq/blob/master/src/drivers/ring-virtual-beams-bridge.groovy) - Smart Lighting (Beams) bridge
 - [ring-virtual-beams-group.groovy](https://github.com/codahq/ring_hubitat_codahq/blob/master/src/drivers/ring-virtual-beams-group.groovy) - Smart Lighting Group
 - [ring-virtual-beams-light.groovy](https://github.com/codahq/ring_hubitat_codahq/blob/master/src/drivers/ring-virtual-beams-light.groovy) - Smart Lighting Light with Motion Sensor
 - [ring-virtual-beams-motion-sensor.groovy](https://github.com/codahq/ring_hubitat_codahq/blob/master/src/drivers/ring-virtual-beams-motion-sensor.groovy) - Smart Lighting Motion Sensor
+- [ring-virtual-siren.groovy](https://github.com/codahq/ring_hubitat_codahq/blob/master/src/drivers/ring-virtual-siren.groovy) - Any Z-wave (Dome) siren that conects to Ring Alarm
+- [ring-virtual-switch.groovy](https://github.com/codahq/ring_hubitat_codahq/blob/master/src/drivers/ring-virtual-switch.groovy) - Any Z-Wave switch that connects to Ring Alarm
 
-The app will create the camera, chime and doorbell devices automatically.  However, for testing reasons (and some level of control over what devices are installed) the security and beams devices are NOT created automatically.  Once you add the "Ring API Virtual Device" you must go and click install devices on your respective device to get its websocket children device(s) to create.  
+The app will create the camera, chime and doorbell devices automatically.  However, for testing reasons (and some level of control over what devices are installed) the security and beams devices are NOT created automatically.  Once you add the "Ring API Virtual Device" you must go and click install devices on your respective device to get its websocket children device(s) to create.
 
 IF YOU NEED SUPPORT DO NOT OPEN AN ISSUE ON GITHUB.  Issues are for code problems aka bugs.  If you have a support issue please make a post here in [this](https://community.hubitat.com/t/release-ring-integration/26423) thread.
+
+I will try to keep the latest changes marked via the "solution" functionality in Discourse.
 
 The repository:
 https://github.com/codahq/ring_hubitat_codahq
