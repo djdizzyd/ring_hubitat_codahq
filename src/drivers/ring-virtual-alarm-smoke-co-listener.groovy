@@ -15,13 +15,15 @@
  *
  *  Change Log:
  *  2019-04-26: Initial
+ *  2019-11-15: Import URL
  *
  */
 
 import groovy.json.JsonSlurper
 
 metadata {
-  definition(name: "Ring Virtual Alarm Smoke & CO Listener", namespace: "codahq-hubitat", author: "Ben Rimmasch") {
+  definition(name: "Ring Virtual Alarm Smoke & CO Listener", namespace: "codahq-hubitat", author: "Ben Rimmasch",
+    importUrl: "https://raw.githubusercontent.com/codahq/ring_hubitat_codahq/master/src/drivers/ring-virtual-alarm-smoke-co-listener.groovy") {
     capability "Refresh"
     capability "Sensor"
     capability "Motion Sensor"
