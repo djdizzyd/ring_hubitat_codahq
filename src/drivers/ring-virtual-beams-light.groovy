@@ -15,6 +15,7 @@
  *
  *  Change Log:
  *  2019-04-26: Initial
+ *  2019-11-15: Import URL
  *
  */
 
@@ -22,7 +23,8 @@ import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
 
 metadata {
-  definition(name: "Ring Virtual Beams Light", namespace: "codahq-hubitat", author: "Ben Rimmasch") {
+  definition(name: "Ring Virtual Beams Light", namespace: "codahq-hubitat", author: "Ben Rimmasch",
+    importUrl: "https://raw.githubusercontent.com/codahq/ring_hubitat_codahq/master/src/drivers/ring-virtual-beams-light.groovy") {
     capability "Refresh"
     capability "Sensor"
     capability "Motion Sensor"
