@@ -21,6 +21,7 @@
  *  2019-11-11: Mappings for more devices to existing drivers
  *  2019-11-12: Finished IFTTT/Webhooks support for motion and ring event
  *  2019-11-15: Mappings for more devices to existing drivers
+ *              Support to reset OAuth access token
  *
  */
 
@@ -233,7 +234,6 @@ def ifttt() {
       paragraph("If the URL above is blank or incomplete then you must enable OAuth for this app under \"Apps Code\" in Hubitat where this app was installed.")
     }
     section('<b style="font-size: 22px;">Body Payloads</b>') {
-      def iftttPath = "${getFullApiServerUrl()}/ifttt?access_token=${atomicState.accessToken}"
       paragraph(
         state.dingables.collect {
           "<u>" + getChildDevice(getFormattedDNI(it)).label + ":</u>\n" +
