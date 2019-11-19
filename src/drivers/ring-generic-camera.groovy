@@ -17,6 +17,7 @@
  *  2019-11-10: Initial
  *  2019-11-13: Added battery level support
  *  2019-11-15: Import URL
+ *  2019-11-18: Differentiated between ring and motion events
  *
  */
 
@@ -31,6 +32,7 @@ metadata {
     capability "Polling"
     capability "MotionSensor"
     capability "Battery"
+    capability "PushableButton"
 
     command "getDings"
   }
@@ -69,6 +71,10 @@ def logTrace(msg) {
 
 def configure() {
 
+}
+
+def updated() {
+  checkChanged("numberOfButtons", 1)
 }
 
 def parse(String description) {
@@ -110,7 +116,7 @@ def childParse(type, params) {
 private handleRefresh(json) {
   logDebug "handleRefresh(${json.description})"
 
-  if (json.battery_life != null) {
+  if (json.battery_life != null && !["jbox_v1", "lpd_v1", "lpd_v2"].contains(device.getDataValue("kind"))) {
     checkChanged("battery", json.battery_life)
   }
   if (json.firmware_version && device.getDataValue("firmware") != json.firmware_version) {
@@ -126,10 +132,14 @@ private handleDings(type, json) {
   else if (json.kind == "motion" && json.motion == true) {
     checkChanged("motion", "active")
     unschedule(motionOff)
+    if (type == "IFTTT") {
+      def motionTimeout = 60
+      runIn(motionTimeout, motionOff)
+    }
   }
-  if (type == "IFTTT") {
-    def motionTimeout = 60
-    runIn(motionTimeout, motionOff)
+  else if (json.kind == "ding") {
+    logInfo "${device.label} button 1 was pushed"
+    sendEvent(name: "pushed", value: 1, isStateChange: true)
   }
 }
 
