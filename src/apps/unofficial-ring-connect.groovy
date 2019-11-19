@@ -22,6 +22,7 @@
  *  2019-11-12: Finished IFTTT/Webhooks support for motion and ring event
  *  2019-11-15: Mappings for more devices to existing drivers
  *              Support to reset OAuth access token
+ *  2019-11-18: Differentiated between ring and motion events
  *
  */
 
@@ -173,6 +174,10 @@ def ifttt() {
 
   setupDingables()
 
+  def ringables = state.dingables.findAll {
+    RINGABLES.contains(getChildDevice(getFormattedDNI(it)).getDataValue("kind"))
+  }
+
   if (tokenReset) {
     app.updateSetting("tokenReset", false)
     state.accessToken = null;
@@ -210,7 +215,7 @@ def ifttt() {
           "- Use the URL below from the \"Webhooks URL\" section in the URL field without any changes.\n" +
           "- Choose \"POST\" for the Method.\n" +
           "- Choose \"application/json\" for the Content Type.  For the purposes of Hubitat and these notifications the Content Type field is NOT optional even though it says it is.\n" +
-          "- For the Body use the helpful copy and paste snippets created below.  There should be one for each of the supported devices.  For the purposes of Hubitat and these notifications the Body field is NOT optional even though it says it is.\n" +
+          "- For the Body use the helpful copy and paste snippets created below.  There should be one for each of the supported devices.  If you chose ring for the trigger action choose the body payload for ring events.  If you chose motion as the trigger action above choose the body payload for motion events.  For the purposes of Hubitat and these notifications the Body field is NOT optional even though it says it is.\n" +
           "- Click \"Create action\" and test the results."
       )
       paragraph("<b>You must visit <a href=\"https://ifttt.com\" target=\"_blank\">https://ifttt.com</a> to configure the applets.</b>")
@@ -233,11 +238,19 @@ def ifttt() {
       )
       paragraph("If the URL above is blank or incomplete then you must enable OAuth for this app under \"Apps Code\" in Hubitat where this app was installed.")
     }
-    section('<b style="font-size: 22px;">Body Payloads</b>') {
+    section('<b style="font-size: 22px;">Body Payloads for Motion Events</b>') {
       paragraph(
         state.dingables.collect {
           "<u>" + getChildDevice(getFormattedDNI(it)).label + ":</u>\n" +
             "{ \"kind\": \"motion\", \"motion\": true, \"id\": \"${getFormattedDNI(it)}\" }"
+        }.join("\n\n")
+      )
+    }
+    section('<b style="font-size: 22px;">Body Payloads for Ring Events</b>') {
+      paragraph(
+        ringables.collect {
+          "<u>" + getChildDevice(getFormattedDNI(it)).label + ":</u>\n" +
+            "{ \"kind\": \"ring\", \"motion\": false, \"id\": \"${getFormattedDNI(it)}\" }"
         }.join("\n\n")
       )
     }
@@ -246,6 +259,19 @@ def ifttt() {
     }
 
   }
+}
+
+def getRINGABLES() {
+  return [
+    "doorbell",
+    "doorbell_v3",
+    "doorbell_v4",
+    "doorbell_v5",
+    "doorbell_portal",
+    "lpd_v1",
+    "lpd_v2",
+    "jbox_v1"
+  ]
 }
 
 def pollingPage() {
@@ -526,7 +552,7 @@ def processIFTTT() {
 
   logTrace "params: ${params}, request: ${request}, data: ${request.body}, id: ${json.id}, device: ${d}"
 
-  if (d && json.kind == "motion") {
+  if (d && (json.kind == "motion" || json.kind == "ding")) {
     d.childParse("dings", [msg: json, type: "IFTTT"])
   }
 }
