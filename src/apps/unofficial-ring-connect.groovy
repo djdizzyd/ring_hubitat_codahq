@@ -250,7 +250,7 @@ def ifttt() {
       paragraph(
         ringables.collect {
           "<u>" + getChildDevice(getFormattedDNI(it)).label + ":</u>\n" +
-            "{ \"kind\": \"ring\", \"motion\": false, \"id\": \"${getFormattedDNI(it)}\" }"
+            "{ \"kind\": \"ding\", \"motion\": false, \"id\": \"${getFormattedDNI(it)}\" }"
         }.join("\n\n")
       )
     }
