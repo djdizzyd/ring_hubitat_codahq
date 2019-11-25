@@ -16,6 +16,7 @@
  *  Change Log:
  *  2019-04-26: Initial
  *  2019-11-15: Import URL
+ *  2019-11-24: Fix for motion events not working... the entire point of this device.
  *
  */
 
@@ -59,8 +60,8 @@ def setValues(deviceInfo) {
   logDebug "updateDevice(deviceInfo)"
   logTrace "deviceInfo: ${deviceInfo}"
 
-  if (deviceInfo.state && deviceInfo.state.faulted != null) {
-    def motion = deviceInfo.state.faulted ? "active" : "inactive"
+  if (deviceInfo.state && deviceInfo.state.motionStatus != null) {
+    def motion = deviceInfo.state.motionStatus == "clear" ? "inactive" : "active"
     checkChanged("motion", motion)
   }
   if (deviceInfo.batteryLevel) {
