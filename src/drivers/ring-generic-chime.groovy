@@ -16,6 +16,7 @@
  *  Change Log:
  *  2019-03-02: Initial
  *  2019-11-15: Import URL
+ *  2019-12-20: API changes to accommodate Ring upstream API changes
  *
  */
 
@@ -80,7 +81,7 @@ def beep() {
 def playMotion() {
   logDebug "Attempting to play motion."
   if (!isMuted()) {
-    parent.simpleRequest("device-control", [dni: device.deviceNetworkId, kind: "chimes", action: "play_sound", body: [kind: "motion"]])
+    parent.simpleRequest("device-control", [dni: device.deviceNetworkId, kind: "chimes", action: "play_sound", params: [kind: "motion"]])
   }
   else {
     logInfo "No motion because muted"
@@ -90,7 +91,7 @@ def playMotion() {
 def playDing() {
   logDebug "Attempting to play ding."
   if (!isMuted()) {
-    parent.simpleRequest("device-control", [dni: device.deviceNetworkId, kind: "chimes", action: "play_sound", body: [kind: "ding"]])
+    parent.simpleRequest("device-control", [dni: device.deviceNetworkId, kind: "chimes", action: "play_sound", params: [kind: "ding"]])
   }
   else {
     logInfo "No ding because muted"
@@ -101,11 +102,7 @@ def mute() {
   logDebug "Attempting to mute."
   if (!isMuted()) {
     state.prevVolume = device.currentValue("volume")
-    parent.simpleRequest("device-set", [
-      dni: device.deviceNetworkId,
-      kind: "chimes",
-      body: [chime: [settings: [volume: 0]]]
-    ])
+    setVolume(0)
   }
   else {
     logInfo "Already muted."
@@ -116,11 +113,7 @@ def mute() {
 def unmute() {
   logDebug "Attempting to unmute."
   if (isMuted()) {
-    parent.simpleRequest("device-set", [
-      dni: device.deviceNetworkId,
-      kind: "chimes",
-      body: [chime: [settings: [volume: (state.prevVolume / 10 as Integer)]]]
-    ])
+    setVolume(state.prevVolume)
   }
   else {
     logInfo "Already unmuted."
@@ -134,7 +127,7 @@ def setVolume(volumelevel) {
     parent.simpleRequest("device-set", [
       dni: device.deviceNetworkId,
       kind: "chimes",
-      body: [chime: [settings: [volume: (volumelevel / 10 as Integer)]]]
+      params: ["chime[settings][volume]": (volumelevel / 10 as Integer)]
     ])
   }
   else {
