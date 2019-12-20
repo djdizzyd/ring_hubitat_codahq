@@ -16,6 +16,7 @@
  *  Change Log:
  *  2019-03-24: Initial
  *  2019-11-15: Import URL
+ *  2019-12-20: Support for First Alert Smoke/CO Alarm (probably battery only)
  *
  */
 
@@ -563,6 +564,12 @@ def extractDeviceInfos(json) {
       def tmpContext = deviceJson.context?.v1
       copy.deviceName = tmpContext?.deviceName
       copy.roomName = tmpContext?.roomName
+      if (copy.batteryStatus == null && tmpContext.batteryStatus != null)
+        copy.batteryStatus = tmpContext.batteryStatus
+      if ("alarm.smoke" == copy.deviceType && tmpContext?.device?.v1?.alarmStatus) {
+        copy.state = jsonSlurper.parseText('{"smoke": "" }')
+        copy.state.smoke = tmpContext.device.v1
+      }
     }
     if (deviceJson.impulse) {
       def tmpImpulse
@@ -715,6 +722,8 @@ private getDEVICE_TYPES() {
     "sensor.contact": [name: "Ring Virtual Contact Sensor", hidden: false],
     "sensor.motion": [name: "Ring Virtual Motion Sensor", hidden: false],
     "listener.smoke-co": [name: "Ring Virtual Alarm Smoke & CO Listener", hidden: false],
+    "alarm.co": [name: "Ring Virtual CO Alarm", hidden: false],
+    "alarm.smoke": [name: "Ring Virtual Smoke Alarm", hidden: false],
     "range-extender.zwave": [name: "Ring Virtual Alarm Range Extender", hidden: false],
     "lock": [name: "Ring Virtual Lock", hidden: false],
     "security-keypad": [name: "Ring Virtual Keypad", hidden: false],
