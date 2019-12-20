@@ -16,6 +16,7 @@
  *  Change Log:
  *  2019-04-26: Initial
  *  2019-11-15: Import URL
+ *  2019-12-20: Added description to syncing preference for clarity
  *
  */
 
@@ -44,7 +45,7 @@ metadata {
   }
 
   preferences {
-    input name: "syncRingToHsm", type: "bool", title: "Sync Ring Alarm mode to HSM mode?", defaultValue: false
+    input name: "syncRingToHsm", type: "bool", title: "<b>Sync Ring Alarm mode to HSM mode?</b>", description: "When the Ring mode changes would you like the HSM mode to follow it?", defaultValue: false
     input name: "cancelAlertsOnDisarm", type: "bool", title: "Cancel HSM Alerts on Ring Alarm Disarm?", defaultValue: true
     input name: "descriptionTextEnable", type: "bool", title: "Enable descriptionText logging", defaultValue: false
     input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: false
