@@ -17,6 +17,7 @@
  *  2019-11-09: Initial
  *  2019-11-13: Added battery level support
  *  2019-11-15: Import URL
+ *  2019-12-20: Started tinkering with getting thumbnails
  *
  */
 
@@ -34,6 +35,7 @@ metadata {
     capability "Battery"
 
     command "getDings"
+    //command "test"
   }
 
   // simulator metadata
@@ -88,6 +90,10 @@ def refresh() {
 def getDings() {
   logDebug "getDings()"
   parent.simpleRequest("dings")
+}
+
+def test() {
+  parent.simpleRequest("history", [dni: device.deviceNetworkId])
 }
 
 def off(boolean modifyAlarm = true) {
