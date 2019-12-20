@@ -16,6 +16,8 @@
  *  Change Log:
  *  2019-03-02: Initial
  *  2019-11-15: Import URL
+ *  2019-12-20: Fixed flash
+ *              Fixed polling for light status
  *
  */
 
@@ -31,6 +33,7 @@ metadata {
     capability "Polling"
     capability "MotionSensor"
 
+    command "flash"
     command "getDings"
   }
 
@@ -48,8 +51,10 @@ metadata {
     details "button"
   }
   preferences {
-    input name: "pollLight", type: "bool", title: "Enable polling for light status on this device", defaultValue: false
-    input name: "pollDings", type: "bool", title: "Enable polling for rings and motion on this device", defaultValue: false
+    input name: "lightPolling", type: "bool", title: "Enable polling for light status on this device", defaultValue: false
+    input name: "lightInterval", type: "number", range: 10..600, title: "Number of seconds in between light polls", defaultValue: 15
+    input name: "strobeTimeout", type: "enum", title: "Flash Timeout", options: [[30: "30s"], [60: "1m"], [120: "2m"], [180: "3m"]], defaultValue: 30
+    input name: "strobeRate", type: "enum", title: "Flash rate", options: [[1000: "1s"], [2000: "2s"], [5000: "5s"]], defaultValue: 1000
     input name: "descriptionTextEnable", type: "bool", title: "Enable descriptionText logging", defaultValue: false
     input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: false
     input name: "traceLogEnable", type: "bool", title: "Enable trace logging", defaultValue: false
@@ -98,15 +103,59 @@ def getDings() {
   parent.simpleRequest("dings")
 }
 
+def setupPolling() {
+  unschedule()
+  if (lightPolling) {
+    pollLight()
+  }
+}
+
+def pollLight() {
+  logTrace "pollLight()"
+  refresh()
+  if (pollLight) {
+    runIn(lightInterval, pollLight)  //time in seconds
+  }
+}
+
+def updated() {
+  setupPolling()
+}
+
 def on() {
   logDebug "Attempting to switch on."
   parent.simpleRequest("device-set", [dni: device.deviceNetworkId, kind: "doorbots", action: "floodlight_light_on"])
 }
 
 def off() {
+  if (state.strobing) {
+    unschedule()
+  }
+  state.strobing = false
   logDebug "Attempting to switch off."
   parent.simpleRequest("device-set", [dni: device.deviceNetworkId, kind: "doorbots", action: "floodlight_light_off"])
 }
+
+
+def flash() {
+  logInfo "${device.getDisplayName()} was set to flash with a rate of ${strobeRate} milliseconds for ${strobeTimeout.toInteger()} seconds"
+  state.strobing = true
+  strobeOn()
+  runIn(strobeTimeout.toInteger(), off)
+}
+
+def strobeOn() {
+  if (!state.strobing) return
+  runInMillis(strobeRate.toInteger(), strobeOff)
+  parent.simpleRequest("device-set", [dni: device.deviceNetworkId, kind: "doorbots", action: "floodlight_light_on"])
+}
+
+def strobeOff() {
+  if (!state.strobing) return
+  runInMillis(strobeRate.toInteger(), strobeOn)
+  parent.simpleRequest("device-set", [dni: device.deviceNetworkId, kind: "doorbots", action: "floodlight_light_off"])
+}
+
 
 def childParse(type, params) {
   logDebug "childParse(type, msg)"
