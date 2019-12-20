@@ -23,6 +23,12 @@
  *  2019-11-15: Mappings for more devices to existing drivers
  *              Support to reset OAuth access token
  *  2019-11-18: Differentiated between ring and motion events
+ *  2019-12-20: API changes to accommodate Ring upstream API changes
+ *              Changed minimum polling for dings to 8 seconds
+ *              Added support for new cameras doorbells
+ *              Started tinkering with getting thumbnails
+ *              Captured too many attempt errors and killed additional attempts
+ *              Changed the way hardware IDs are generated to match Ring again i.e. moved to GUID
  *
  */
 
@@ -202,7 +208,7 @@ def ifttt() {
           "- An IFTTT account\n" +
           "- The Ring service authorized to your IFTTT account\n" +
           "- A device from Ring that supports the motion and/or ring events shared through the Ring services authorization\n" +
-          "- The Webhooks service authorized to your IFTTT account\n"
+          "- The Webhooks service authorized to your IFTTT account. (This appears to be done already for new accounts.)\n"
       )
     }
     section('<b style="font-size: 22px;">Steps to create IFTTT Applets</b>') {
@@ -291,7 +297,7 @@ def pollingPage() {
     section("Polling Configuration") {
       preferences {
         input name: "dingPolling", type: "bool", title: "Poll for motion and rings", defaultValue: false, submitOnChange: true
-        input name: "dingInterval", type: "number", range: "7..20", title: "Number of seconds in between motion/ring polls", defaultValue: 15, submitOnChange: true
+        input name: "dingInterval", type: "number", range: "8..20", title: "Number of seconds in between motion/ring polls", defaultValue: 15, submitOnChange: true
       }
     }
   }
@@ -697,9 +703,11 @@ private getDEVICE_TYPES() {
 
     "hp_cam_v1": [name: "Ring Floodlight Cam", driver: "Ring Generic Light with Siren", dingable: true],
     "hp_cam_v2": [name: "Ring Spotlight Cam Wired", driver: "Ring Generic Light with Siren", dingable: true],
+    "floodlight_v2": [name: "Ring Floodlight Cam Wired", driver: "Ring Generic Light with Siren", dingable: true],
     "stickup_cam": [name: "Ring Original Stick Up Cam", driver: "Ring Generic Light", dingable: true],
     "stickup_cam_v4": [name: "Ring Spotlight Cam Battery", driver: "Ring Generic Light", dingable: true],
     "stickup_cam_lunar": [name: "Ring Stick Up Cam Battery", driver: "Ring Generic Camera with Siren", dingable: true],
+    "cocoa_camera": [name: "Ring Stick Up Cam Battery", driver: "Ring Generic Camera with Siren", dingable: true],
     "stickup_cam_elite": [name: "Ring Stick Up Cam Wired", driver: "Ring Generic Camera with Siren", dingable: true],
     "stickup_cam_mini": [name: "Ring Indoor Cam", driver: "Ring Generic Camera with Siren", dingable: true],
     "doorbell": [name: "Ring Video Doorbell", driver: "Ring Generic Camera", dingable: true],
@@ -803,20 +811,22 @@ private getRequests(parts) {
     "devices": [
       method: GET,
       synchronous: true,
-      type: "token",
+      type: "bearer",
       params: [
         uri: "https://api.ring.com",
         path: "/clients_api/ring_devices" + (parts.dni ? "/${getRingDeviceId(parts.dni)}" : ""),
+        query: ["api_version": 11],
         contentType: JSON
       ]
     ],
     "refresh": [
       method: GET,
       synchronous: false,
-      type: "token",
+      type: "bearer",
       params: [
         uri: "https://api.ring.com",
         path: "/clients_api/ring_devices" + (parts.dni ? "/${getRingDeviceId(parts.dni)}" : ""),
+        query: ["api_version": 11],
         contentType: JSON
       ]
     ],
@@ -836,10 +846,11 @@ private getRequests(parts) {
     ],
     "device-control": [
       method: POST,
-      type: "token",
+      type: "bearer",
       params: [
         uri: "https://api.ring.com",
         path: "/clients_api/${parts.kind}/${getRingDeviceId(parts.dni)}/${parts.action}",
+        query: parts.params,
         contentType: TEXT,
         requestContentType: JSON,
         body: parts.body
@@ -847,10 +858,11 @@ private getRequests(parts) {
     ],
     "device-set": [
       method: PUT,
-      type: "token",
+      type: "bearer",
       params: [
         uri: "https://api.ring.com",
         path: "/clients_api/${parts.kind}/${getRingDeviceId(parts.dni)}" + "${parts.action ? "/${parts.action}" : ""}",
+        query: parts.params,
         contentType: TEXT,
         requestContentType: JSON,
         body: parts.body
@@ -904,6 +916,19 @@ private getRequests(parts) {
         'Content-Type': "application/x-www-form-urlencoded"
       ]
     ],
+    "history": [
+      method: GET,
+      type: "bearer",
+      params: [
+        uri: "https://api.ring.com",
+        path: "/clients_api/doorbots/history",
+        query: ["api_version": 11, "limit": 9, "doorbot_ids%5B%5D": "${getRingDeviceId(parts.dni)}"],
+        contentType: JSON
+      ],
+      headers: [
+        "hardware_id": state.appDeviceId
+      ]
+    ],
     "subscribe": [
       method: PUT,
       type: "bearer",
@@ -938,6 +963,7 @@ private getRequests(parts) {
 static standardHeaders = [
   'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36"
   //,'User-Agent': "Dalvik/2.1.0 (Linux; U; Android 6.0.1; Nexus 7 Build/MOB30X)"
+  //,'User-Agent': "Dalvik/2.1.0 (Linux; U; Android 7.1.2; Nexus 4 Build/NZH54D)"
   , 'accept-encoding': 'gzip, deflate'
   , 'Connection': 'keep-alive'
   //, 'Accept': '*/*'
@@ -1055,6 +1081,12 @@ def doSynchronousAction(type, method, params) {
   }
   catch (ex) {
     logTrace "ex: ${ex} ${ex != null ? ex.getStatusCode() : ''}"
+    if (ex.getStatusCode() == 429) {
+      state.access_token = "EMPTY"
+      state.authentication_token = "EMPTY"
+      state.refresh_token = null
+      state.holdRequests = true
+    }
     if (ex instanceof groovyx.net.http.HttpResponseException && ex.getStatusCode() == 401 && !(method in ["auth", "session"])) {
       logInfo "Not authenticated!"
       state.access_token = "EMPTY"
@@ -1148,8 +1180,8 @@ def responseHandler(response, params) {
       getChildDevice(params.data.dni).childParse(params.method, [
         response: response.getStatus(),
         action: params.data.action,
-        kind: params.data.body?.kind,
-        volume: params.data.body?.chime?.settings?.volume,
+        kind: params.data.params?.kind,
+        volume: params.data.params?."chime[settings][volume]",
         msg: body
       ])
     }
@@ -1218,8 +1250,10 @@ def String getRingDeviceId(dni) {
 def generateAppDeviceId() {
   logDebug "generateAppDeviceId()"
   //Let's generate an ID so that Ring doesn't think these are all coming from the same device
-  def r = new Random()
-  def result = (0..<32).collect { r.nextInt(16) }.collect { Integer.toString(it, 16).toUpperCase() }.join()
+  //def r = new Random()
+  //def result = (0..<32).collect { r.nextInt(16) }.collect { Integer.toString(it, 16).toUpperCase() }.join()
+
+  def result = UUID.randomUUID().toString()
   logInfo "Device ID generated: ${result}"
   state.appDeviceId = result
 }
