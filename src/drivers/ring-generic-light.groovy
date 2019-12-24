@@ -18,6 +18,7 @@
  *  2019-11-15: Import URL
  *  2019-12-20: Fixed flash
  *              Fixed polling for light status
+ *	2019-12-23: Added battery support
  *
  */
 
@@ -32,6 +33,7 @@ metadata {
     capability "Refresh"
     capability "Polling"
     capability "MotionSensor"
+	capability "Battery"
 
     command "flash"
     command "getDings"
@@ -181,6 +183,11 @@ def childParse(type, params) {
 
 private handleRefresh(json) {
   logTrace "handleRefresh(${json.description})"
+  
+  if (json.battery_life != null) {
+    checkChanged("battery", json.battery_life)
+  }
+  
   if (!json.led_status) {
     log.warn "No status?"
     return
