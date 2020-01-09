@@ -17,6 +17,8 @@
  *  2019-04-26: Initial
  *  2019-11-15: Import URL
  *  2019-12-20: Added description to syncing preference for clarity
+ *  2020-01-09: Fixed update to HSM status to only happen when necessary
+ *              Added fireAlarm attribute to hold fire alarm status
  *
  */
 
@@ -34,6 +36,7 @@ metadata {
     attribute "mode", "string"
     attribute "entryDelay", "string"
     attribute "exitDelay", "string"
+    attribute "fireAlarm", "string"
     attribute "brightness", "number"
     attribute "countdownTimeLeft", "number"
     attribute "countdownTotal", "number"
@@ -210,9 +213,9 @@ def setBrightness(brightness) {
 
 private getRING_TO_HSM_MODE_MAP() {
   return [
-    "home": "armHome",
-    "away": "armAway",
-    "off": "disarm"
+    "home": [set: "armHome", status: "armedHome"],
+    "away": [set: "armAway", status: "armedAway"],
+    "off": [set: "disarm", status: "disarmed"]
   ]
 }
 
@@ -232,8 +235,8 @@ def setValues(deviceInfo) {
       checkChanged("exitDelay", "inactive")
     }
   }
-  if (deviceInfo.state?.mode && syncRingToHsm && location.hsmStatus != RING_TO_HSM_MODE_MAP[MODES["${deviceInfo.state?.mode}"]]) {
-    def hsmMode = RING_TO_HSM_MODE_MAP[MODES["${deviceInfo.state?.mode}"]]
+  if (deviceInfo.state?.mode && syncRingToHsm && location.hsmStatus != RING_TO_HSM_MODE_MAP[MODES["${deviceInfo.state?.mode}"]].status) {
+    def hsmMode = RING_TO_HSM_MODE_MAP[MODES["${deviceInfo.state?.mode}"]].set
     logInfo "Setting HSM to ${hsmMode}"
     logTrace "mode: ${MODES["${deviceInfo.state?.mode}"]} hsmStatus: ${location.hsmStatus}"
     sendLocationEvent(name: "hsmSetArm", value: hsmMode)
@@ -250,6 +253,15 @@ def setValues(deviceInfo) {
   if (deviceInfo.state?.alarmInfo) {
     def entryDelay = deviceInfo.state?.alarmInfo.state == "entry-delay" ? "active" : "inactive"
     checkChanged("entryDelay", entryDelay)
+
+    //TODO: after a small cooking mishap noticed that fire-alarm has a different alarmInfo.state than intrusion so I added an attribute and a
+    //case for it while I decide what to do with it long term.  should this also set the "alarm" attribute or should the base also implement
+    //smoke alarm? or neither and it's just fine in the attribute since there will be a device for the smoke detector?  in fact, do I just
+    //ignore this update because the smoke detector device will already get its own update?  or does it?
+
+    def fireAlarm = deviceInfo.state?.alarmInfo.state == "fire-alarm" ? "active" : "inactive"
+    checkChanged("fireAlarm", fireAlarm)
+
     //TODO: work on faulted devices
     //state.faultedDevices.each {
     //  def faultedDev = parent.getChildByZID(it)
@@ -280,11 +292,6 @@ def setValues(deviceInfo) {
   }
   if (deviceInfo.state?.brightness != null) {
     checkChanged("brightness", (deviceInfo.state.brightness * 100) as Integer)
-  }
-  //TODO: check if there is really a tamper status on the hub or child components
-  if (deviceInfo.tamperStatus) {
-    def tamper = deviceInfo.tamperStatus == "tamper" ? "detected" : "clear"
-    checkChanged("tamper", tamper)
   }
   if (deviceInfo.lastUpdate) {
     state.lastUpdate = deviceInfo.lastUpdate
