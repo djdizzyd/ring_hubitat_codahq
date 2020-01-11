@@ -16,6 +16,7 @@
  *  Change Log:
  *  2019-04-26: Initial
  *  2019-11-15: Import URL
+ *  2020-01-11: Removed the motion sensor capability because it shouldn't have been there
  *
  */
 
@@ -26,7 +27,6 @@ metadata {
     importUrl: "https://raw.githubusercontent.com/codahq/ring_hubitat_codahq/master/src/drivers/ring-virtual-alarm-smoke-co-listener.groovy") {
     capability "Refresh"
     capability "Sensor"
-    capability "Motion Sensor"
     capability "Battery"
     capability "TamperAlert"
     capability "CarbonMonoxideDetector" //carbonMonoxide - ENUM ["detected", "tested", "clear"]
