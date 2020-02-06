@@ -16,6 +16,11 @@
  *  Change Log:
  *  2019-04-26: Initial
  *  2019-11-15: Import URL
+ *  2020-01-11: Fixed motion sensing capabilities (I noticed there is a new impulse type of "keypad.motion" so the websocket
+ *                now returns enough information to somewhat reliably do this.  It's like they can hear my thoughts.  As of
+ *                this change the active message comes reliably but the inactive message does not.  For this reason I just
+ *                schedule off the motion instead.  Maybe at some later date I can change it to turn off when a message is
+ *                received.)
  *
  */
 
@@ -36,7 +41,7 @@ metadata {
   }
 
   preferences {
-    input name: "motionTimeout", type: "number", range: 15..600, title: "Time in seconds before motion resets to inactive", defaultValue: 60
+    input name: "motionTimeout", type: "number", range: 5..600, title: "Time in seconds before motion resets to inactive", defaultValue: 15
     input name: "descriptionTextEnable", type: "bool", title: "Enable descriptionText logging", defaultValue: false
     input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: false
     input name: "traceLogEnable", type: "bool", title: "Enable trace logging", defaultValue: false
@@ -135,7 +140,7 @@ def refresh() {
 }
 
 def stopMotion() {
-  sendEvent([name: "motion", value: "inactive"])
+  checkChanged("motion", "inactive")
 }
 
 def setValues(deviceInfo) {
@@ -152,22 +157,17 @@ def setValues(deviceInfo) {
   //  sendEvent(name: "mode", value: params.mode)
   //}
 
-  //TODO: see if i want to support motion here
-  //if (params.motion) {
-  //  unschedule()
-  //  sendEvent([name: "motion", value: params.motion])
-  //  runIn(motionTimeout.toInteger(), stopMotion)
-  //}
-
+  if (deviceInfo.impulseType == "keypad.motion") {
+    checkChanged("motion", "active")
+    //The inactive message almostm never comes reliably.  for now we'll schedule it off
+    unschedule()
+    runIn(motionTimeout.toInteger(), stopMotion)
+  }
   if (deviceInfo.state && deviceInfo.state.brightness != null) {
     checkChanged("brightness", (deviceInfo.state.brightness * 100) as Integer)
   }
   if (deviceInfo.batteryLevel) {
     checkChanged("battery", deviceInfo.batteryLevel)
-  }
-  if (deviceInfo.tamperStatus) {
-    def tamper = deviceInfo.tamperStatus == "tamper" ? "detected" : "clear"
-    checkChanged("tamper", tamper)
   }
   if (deviceInfo.lastUpdate) {
     state.lastUpdate = deviceInfo.lastUpdate
