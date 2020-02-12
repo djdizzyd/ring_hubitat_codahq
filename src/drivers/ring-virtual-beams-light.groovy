@@ -16,6 +16,12 @@
  *  Change Log:
  *  2019-04-26: Initial
  *  2019-11-15: Import URL
+ *  2020-02-12: Removed ability to set brightness on the floodlight (type ring-beams-c5000)
+ *              Took special care to not report battery on the floodlight (type ring-beams-c5000)
+ *              Added the ability to turn on with a duration (60 seconds is default)
+ *              Fixed battery % to show correctly in dashboards
+ *              Fixed an issue where hardware version was lost
+ *
  *
  */
 
@@ -34,6 +40,7 @@ metadata {
 
     attribute "brightness", "number"
 
+    command "on", [[name: "Duration", type: "NUMBER", range: "0..28800", description: "Choose a value between 0 and 28800 seconds"]]
     command "setBrightness", [[name: "Set LED Brightness*", type: "NUMBER", range: "0..100", description: "Choose a value between 0 and 100"]]
   }
 
@@ -61,10 +68,9 @@ def refresh() {
   //parent.simpleRequest("refresh-device", [dni: device.deviceNetworkId])
 }
 
-def on() {
+def on(duration = 60) {
   logDebug "Attempting to turn the light on."
-  logDebug "Attempting to turn the light off."
-  def data = ["lightMode": "on", "duration": 60]
+  def data = ["lightMode": "on", "duration": duration]
   parent.simpleRequest("setcommand", [type: "light-mode.set", zid: device.getDataValue("zid"), dst: device.getDataValue("src"), data: data])
 }
 
@@ -76,6 +82,10 @@ def off() {
 
 def setBrightness(brightness) {
   logDebug "Attempting to set brightness ${brightness}."
+  if (NO_BRIGHTNESS_DEVICES.contains(device.getDataValue("fingerprint"))) {
+    log.error "This device doesn't support brightness!"
+    return
+  }
   def data = ["level": ((brightness == null ? 100 : brightness).toDouble() / 100)]
   parent.simpleRequest("setdevice", [zid: device.getDataValue("zid"), dst: device.getDataValue("src"), data: data])
 }
@@ -92,12 +102,12 @@ def setValues(deviceInfo) {
     def switchState = deviceInfo.state.on ? "on" : "off"
     checkChanged("switch", switchState)
   }
-  if (deviceInfo.state && deviceInfo.state.level != null) {
+  if (deviceInfo.state && deviceInfo.state.level != null && !NO_BRIGHTNESS_DEVICES.contains(device.getDataValue("fingerprint"))) {
     def brightness = (deviceInfo.state.level.toDouble() * 100).toInteger()
     checkChanged("brightness", brightness)
   }
-  if (deviceInfo.batteryLevel) {
-    checkChanged("battery", deviceInfo.batteryLevel)
+  if (deviceInfo.batteryLevel && !discardBatteryLevel && !NO_BATTERY_DEVICES.contains(device.getDataValue("fingerprint"))) {
+    checkChanged("battery", deviceInfo.batteryLevel, "%")
   }
   if (deviceInfo.tamperStatus) {
     def tamper = deviceInfo.tamperStatus == "tamper" ? "detected" : "clear"
@@ -121,15 +131,32 @@ def setValues(deviceInfo) {
   if (deviceInfo.firmware && device.getDataValue("firmware") != deviceInfo.firmware) {
     device.updateDataValue("firmware", deviceInfo.firmware)
   }
-  if (deviceInfo.hardwareVersion && device.getDataValue("hardwareVersion") != deviceInfo.hardwareVersion) {
+  if (deviceInfo.hardwareVersion && deviceInfo.hardwareVersion != "null" && device.getDataValue("hardwareVersion") != deviceInfo.hardwareVersion) {
     device.updateDataValue("hardwareVersion", deviceInfo.hardwareVersion)
   }
 
 }
 
+def getNO_BATTERY_DEVICES() {
+  return [
+    "ring-beams-c5000"
+  ]
+}
+
+def getNO_BRIGHTNESS_DEVICES() {
+  return [
+    "ring-beams-c5000"
+  ]
+}
+
 def checkChanged(attribute, newStatus) {
+  checkChanged(attribute, newStatus, null)
+}
+
+def checkChanged(attribute, newStatus, unit) {
   if (device.currentValue(attribute) != newStatus) {
     logInfo "${attribute.capitalize()} for device ${device.label} is ${newStatus}"
-    sendEvent(name: attribute, value: newStatus)
+    sendEvent(name: attribute, value: newStatus, unit: unit)
   }
 }
+
