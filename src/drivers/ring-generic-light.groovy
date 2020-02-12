@@ -19,6 +19,7 @@
  *  2019-12-20: Fixed flash
  *              Fixed polling for light status
  *  2019-12-23: Added battery support
+ *  2020-02-11: Added second battery support
  *
  */
 
@@ -37,6 +38,8 @@ metadata {
 
     command "flash"
     command "getDings"
+
+    attribute "battery2", "number"
   }
 
   // simulator metadata
@@ -188,7 +191,10 @@ private handleRefresh(json) {
   logTrace "handleRefresh(${json.description})"
 
   if (json.battery_life != null && !discardBatteryLevel) {
-    checkChanged("battery", json.battery_life?.toInteger(), "%")
+    checkChanged("battery", json.battery_life, "%")
+    if (json.battery_life_2 != null) {
+      checkChanged("battery2", json.battery_life_2, "%")
+    }
   }
 
   if (!json.led_status) {
