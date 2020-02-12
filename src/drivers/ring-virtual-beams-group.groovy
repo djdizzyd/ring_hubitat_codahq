@@ -16,6 +16,7 @@
  *  Change Log:
  *  2019-04-26: Initial
  *  2019-11-15: Import URL
+ *  2020-02-12: Fixed odd behavior for when a group is added that has a member that isn't created
  *
  */
 
@@ -93,7 +94,12 @@ def setValues(deviceInfo) {
   if (deviceInfo.state?.groupMembers) {
     state.members = deviceInfo.state?.groupMembers.collectEntries {
       def d = parent.getChildByZID(it)
-      [(d.deviceNetworkId): d.label]
+      if (d) {
+        [(d.deviceNetworkId): d.label]
+      }
+      else {
+        log.warn "Device ${it} isn't created in Hubitat and will not be included in this group's members."
+      }
     }
   }
 }
