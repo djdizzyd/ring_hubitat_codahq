@@ -29,6 +29,11 @@
  *              Started tinkering with getting thumbnails
  *              Captured too many attempt errors and killed additional attempts
  *              Changed the way hardware IDs are generated to match Ring again i.e. moved to GUID
+ *  2020-02-12: Started to comment out session code for deletion since it Ring does not seem to use it any longer
+ *              Handled malformed user JSON coming from IFTTT gracefully
+ *              Fixed mapping for original Stick Up Cam
+ *              Added some snapshot image calls (these won't work until HE changes their async methods to support images)
+ *
  *
  */
 
@@ -552,11 +557,18 @@ def jsonResponse(respMap) {
 }
 
 def processIFTTT() {
-  logDebug "processIFTTT($request)"
-  def json = parseJson(request.body)
+  def json
+  try {
+    json = parseJson(request.body)
+  }
+  catch (e) {
+    log.error "JSON received from IFTTT is invalid! ${request.body}"
+    return
+  }
+  logDebug "processIFTTT() with ${json.kind} for ${json.id}"
   def d = getChildDevice(json.id)
 
-  logTrace "params: ${params}, request: ${request}, data: ${request.body}, id: ${json.id}, device: ${d}"
+  logTrace "data received: kind: ${json.kind}, id: ${json.id}, device: ${d}, ${params}, request: ${request}, data: ${request.body}"
 
   if (d && (json.kind == "motion" || json.kind == "ding")) {
     d.childParse("dings", [msg: json, type: "IFTTT"])
@@ -577,7 +589,6 @@ def addDevices() {
 
   selectedDevices.each {
     id ->
-      //bridgeLinking
 
       logTrace "Selected id ${id}"
 
@@ -704,7 +715,8 @@ private getDEVICE_TYPES() {
     "hp_cam_v1": [name: "Ring Floodlight Cam", driver: "Ring Generic Light with Siren", dingable: true],
     "hp_cam_v2": [name: "Ring Spotlight Cam Wired", driver: "Ring Generic Light with Siren", dingable: true],
     "floodlight_v2": [name: "Ring Floodlight Cam Wired", driver: "Ring Generic Light with Siren", dingable: true],
-    "stickup_cam": [name: "Ring Original Stick Up Cam", driver: "Ring Generic Light", dingable: true],
+    "stickup_cam": [name: "Ring Original Stick Up Cam", driver: "Ring Generic Camera", dingable: true],
+    "stickup_cam_v3": [name: "Ring Stick Up Cam", driver: "Ring Generic Camera", dingable: true],
     "stickup_cam_v4": [name: "Ring Spotlight Cam Battery", driver: "Ring Generic Light", dingable: true],
     "stickup_cam_lunar": [name: "Ring Stick Up Cam Battery", driver: "Ring Generic Camera with Siren", dingable: true],
     "cocoa_camera": [name: "Ring Stick Up Cam Battery", driver: "Ring Generic Camera with Siren", dingable: true],
@@ -776,6 +788,7 @@ private getRequests(parts) {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36",
         "hardware_id": state.appDeviceId
       ] << (parts.twoFactorCode != null ? ['2fa-support': 'true', '2fa-code': parts.twoFactorCode] : [:])
+        << (parts.grantData?.grant_type == 'refresh_token' ? ['Authorization': "Bearer ${state.access_token}"] : [:])
     ],
     "session": [
       method: POST,
@@ -929,6 +942,38 @@ private getRequests(parts) {
         "hardware_id": state.appDeviceId
       ]
     ],
+    "snapshot-timestamps": [
+      method: POST,
+      type: "bearer",
+      params: [
+        uri: "https://api.ring.com",
+        path: "/clients_api/snapshots/timestamps",
+        requestContentType: JSON,
+        body: [
+          "doorbot_ids": [getRingDeviceId(parts.dni)]
+        ]
+      ],
+      headers: [
+        "User-Agent": "ring_official_windows/2.4.0",
+        "Hardware_ID": state.appDeviceId,
+        "Accept": "application.vnd.api.v11+json"
+      ]
+    ],
+    "snapshot-image": [
+      method: GET,
+      synchronous: false,
+      type: "bearer",
+      params: [
+        uri: "https://api.ring.com",
+        path: "/clients_api/snapshots/image/${getRingDeviceId(parts.dni)}",
+        requestContentType: JSON
+      ],
+      headers: [
+        "User-Agent": "ring_official_windows/2.4.0",
+        "Hardware_ID": state.appDeviceId,
+        "Accept": "application.vnd.api.v11+json"
+      ]
+    ],
     "subscribe": [
       method: PUT,
       type: "bearer",
@@ -977,7 +1022,7 @@ def parse(String description) {
 }
 
 def authenticate(twoFactorCode) {
-  logTrace "authenticate($twoFactorCode)"
+  logDebug "authenticate($twoFactorCode)"
   if (!state.appDeviceId) {
     generateAppDeviceId()
   }
@@ -989,13 +1034,16 @@ def authenticate(twoFactorCode) {
     return result
   }
   if (result) {
-    simpleRequest("session")
-    return state.authentication_token
+    //simpleRequest("session")
+    //return state.authentication_token
+    //TMP: trying without session
+    return state.access_token
   }
 }
 
 private getGrantData(twoFactorCode) {
   if (state.refresh_token && !twoFactorCode) {
+    logDebug "refresh_token used"
     return [
       "grant_type": 'refresh_token',
       "refresh_token": state.refresh_token
@@ -1141,16 +1189,24 @@ def responseHandler(response, params) {
     if (params.method == "auth") {
       state.access_token = response.data.access_token
       state.refresh_token = response.data.refresh_token
+      logInfo "Authenticated, Token Found."
       logDebug "access token: ${state.access_token}"
       logDebug "refresh token: ${state.refresh_token}"
-      return state.access_token && state.access_token != "EMPTY" && state.refresh_token
+      def result = state.access_token && state.access_token != "EMPTY" && state.refresh_token
+      if (result) {
+        state.holdRequests = false
+      }
+      return result
     }
+    /*
+    Potentially no longer needed.
     else if (params.method == "session") {
       state.authentication_token = response?.data?.profile.authentication_token
-      logDebug "Authenticated, Token Found."
-      state.holdRequests = false
+      logInfo "Authenticated, Token Found."
+      //state.holdRequests = false
       return state.authentication_token && state.authentication_token != "EMPTY"
     }
+    */
     else if (params.method == "locations") {
       return response.data.user_locations
     }
@@ -1183,6 +1239,16 @@ def responseHandler(response, params) {
         kind: params.data.params?.kind,
         volume: params.data.params?."chime[settings][volume]",
         msg: body
+      ])
+    }
+    else if (params.method == "snapshot-image") {
+      response.properties.each {log.warn it}
+      getChildDevice(params.data.dni).childParse(params.method, [
+        response: response.getStatus(),
+        action: params.data.action,
+        kind: params.data.params?.kind,
+        //jpg: "data:image/png;base64,${response.data.encodeBase64().toString()}"
+        jpg: "<img src=\"data:image/png;base64,${response.data.encodeBase64().toString()}\" alt=\"Snapshot\" />"
       ])
     }
     //else if (params.method == "tickets") {
@@ -1220,8 +1286,10 @@ def responseHandler(response, params) {
 
 def loggedIn() {
   logDebug "loggedIn()"
-  logTrace "state.authentication_token ${state.authentication_token}"
-  return state.authentication_token && state.authentication_token != "EMPTY"
+  //logTrace "state.authentication_token ${state.authentication_token}"
+  //return state.authentication_token && state.authentication_token != "EMPTY"
+  logTrace "state.access_token ${state.access_token}"
+  return state.access_token && state.access_token != "EMPTY"
 }
 
 //logging help methods
