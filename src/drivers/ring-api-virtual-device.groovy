@@ -1,5 +1,5 @@
 /**
- *  Ring Alarm Device Driver
+ *  Ring API Virtual Device Driver
  *
  *  Copyright 2019 Ben Rimmasch
  *
@@ -17,6 +17,10 @@
  *  2019-03-24: Initial
  *  2019-11-15: Import URL
  *  2019-12-20: Support for First Alert Smoke/CO Alarm (probably battery only)
+ *  2020-02-11: Support for tilt sensors (using the contact sensor driver)
+ *              Support for the Ring Flood & Freeze Sensor
+ *              Updated to the documented location of the websocket client
+ *              Added an informational log when the websocket timeout it received
  *
  */
 
@@ -314,19 +318,19 @@ private getRequests(parts) {
 }
 
 def sendMsg(String s) {
-  InterfaceUtils.sendWebSocketMessage(device, s)
+  interfaces.webSocket.sendMessage(s)
 }
 
 def webSocketStatus(String status) {
-  logDebug "webSocketStatus- ${status}"
+  logDebug "webSocketStatus(${status})"
 
   if (status.startsWith('failure: ')) {
-    log.warn("failure message from web socket ${status}")
+    log.warn("Failure message from web socket: ${status.substring("failure: ".length())}")
     sendEvent(name: "websocket", value: "failure")
     reconnectWebSocket()
   }
   else if (status == 'status: open') {
-    logInfo "websocket is open"
+    logInfo "WebSocket is open"
     // success! reset reconnect delay
     sendEvent(name: "websocket", value: "connected")
     pauseExecution(1000)
@@ -365,7 +369,7 @@ def initWebsocket(json) {
   logTrace "wsUrl: $wsUrl"
 
   try {
-    InterfaceUtils.webSocketConnect(device, wsUrl)
+    interfaces.webSocket.connect(wsUrl)
     logInfo "Connected!"
     sendEvent(name: "websocket", value: "connected")
     refresh()
@@ -412,13 +416,13 @@ def parse(String description) {
     def json = slurper.parseText(msg)
     //logTrace "json: $json"
 
-    def deviceInfos = []
+    def deviceInfos
 
     if (json[0].equals("DataUpdate")) {
-      deviceInfos += extractDeviceInfos(json[1])
+      deviceInfos = extractDeviceInfos(json[1])
     }
     else if (json[0].equals("message") && json[1].msg == "DeviceInfoDocGetList" && json[1].datatype == "DeviceInfoDocType") {
-      deviceInfos += extractDeviceInfos(json[1])
+      deviceInfos = extractDeviceInfos(json[1])
 
       if (!getChildByZID(json[1].context.assetId)) {
         createDevice([deviceType: json[1].context.assetKind, zid: json[1].context.assetId, src: json[1].src])
@@ -441,6 +445,14 @@ def parse(String description) {
         log.warn "I think a SetKeychainValue failed?"
         log.warn description
       }
+    }
+    else if (json[0].equals("disconnect")) {
+      logInfo "Websocket timeout hit.  Reconnecting..."
+      interfaces.webSocket.close()
+      sendEvent(name: "websocket", value: "disconnect")
+      //It appears we don't disconnect fast enough because we still get a failure from the status method when we close.  Because
+      //of that failure message and reconnect there we do not need to reconnect here.  Commenting out for now.
+      //reconnectWebSocket()
     }
     else {
       log.warn "huh? what's this?"
@@ -720,7 +732,9 @@ private getDEVICE_TYPES() {
   return [
     //physical alarm devices
     "sensor.contact": [name: "Ring Virtual Contact Sensor", hidden: false],
+    "sensor.tilt": [name: "Ring Virtual Contact Sensor", hidden: false],
     "sensor.motion": [name: "Ring Virtual Motion Sensor", hidden: false],
+    "sensor.flood-freeze": [name: "Ring Virtual Alarm Flood & Freeze Sensor", hidden: false],
     "listener.smoke-co": [name: "Ring Virtual Alarm Smoke & CO Listener", hidden: false],
     "alarm.co": [name: "Ring Virtual CO Alarm", hidden: false],
     "alarm.smoke": [name: "Ring Virtual Smoke Alarm", hidden: false],
