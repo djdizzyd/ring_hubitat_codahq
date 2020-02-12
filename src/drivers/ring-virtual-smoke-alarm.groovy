@@ -15,6 +15,8 @@
  *
  *  Change Log:
  *  2019-12-20: Initial
+ *  2020-02-12: Fixed battery % to show correctly in dashboards
+ *              Made some guesses on how the alarm component of this actually works
  *
  */
 
@@ -59,14 +61,22 @@ def setValues(deviceInfo) {
   logDebug "updateDevice(deviceInfo)"
   logTrace "deviceInfo: ${deviceInfo}"
 
+  /* this block possibly unecessary*/
   if (deviceInfo.state && deviceInfo.state.smoke != null) {
     def smoke = (deviceInfo.state.smoke.alarmStatus == "active") ? "detected" : (deviceInfo.state.smoke.alarmStatus == "inactive" ? "clear" : "tested")
     checkChanged("smoke", smoke)
     if (deviceInfo.state.smoke.enabledTimeMs)
       state.smokeEnabled = deviceInfo.state.smoke.enabledTimeMs
   }
+  /* end block */
+  if (deviceInfo.state && deviceInfo.state.alarmStatus != null) {
+    def smoke = (deviceInfo.state.alarmStatus == "active") ? "detected" : (deviceInfo.state.alarmStatus == "inactive" ? "clear" : "tested")
+    checkChanged("smoke", smoke)
+    if (deviceInfo.state.enabledTimeMs)
+      state.smokeEnabled = deviceInfo.state.enabledTimeMs
+  }
   if (deviceInfo.batteryLevel) {
-    checkChanged("battery", deviceInfo.batteryLevel)
+    checkChanged("battery", deviceInfo.batteryLevel, "%")
   }
   if (deviceInfo.tamperStatus) {
     def tamper = deviceInfo.tamperStatus == "tamper" ? "detected" : "clear"
@@ -97,8 +107,13 @@ def setValues(deviceInfo) {
 }
 
 def checkChanged(attribute, newStatus) {
+  checkChanged(attribute, newStatus, null)
+}
+
+def checkChanged(attribute, newStatus, unit) {
   if (device.currentValue(attribute) != newStatus) {
     logInfo "${attribute.capitalize()} for device ${device.label} is ${newStatus}"
-    sendEvent(name: attribute, value: newStatus)
+    sendEvent(name: attribute, value: newStatus, unit: unit)
   }
 }
+
