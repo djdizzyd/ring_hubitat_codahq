@@ -61,11 +61,11 @@ def setValues(deviceInfo) {
   logTrace "deviceInfo: ${deviceInfo}"
 
   if (deviceInfo.state && deviceInfo.state.faulted != null) {
-    if (deviceInfo.state.flood.faulted != null) {
+    if (deviceInfo.state.flood?.faulted != null) {
       def water = deviceInfo.state.flood.faulted ? "wet" : "dry"
       checkChanged("water", water)
     }
-    if (deviceInfo.state.freeze.faulted != null) {
+    if (deviceInfo.state.freeze?.faulted != null) {
       def freeze = deviceInfo.state.freeze.faulted ? "detected" : "clear"
       checkChanged("freeze", freeze)
     }
