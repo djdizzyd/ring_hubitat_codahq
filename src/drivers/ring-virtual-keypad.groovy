@@ -21,6 +21,7 @@
  *                this change the active message comes reliably but the inactive message does not.  For this reason I just
  *                schedule off the motion instead.  Maybe at some later date I can change it to turn off when a message is
  *                received.)
+ *  2020-02-12: Fixed battery % to show correctly in dashboards
  *
  */
 
@@ -167,7 +168,7 @@ def setValues(deviceInfo) {
     checkChanged("brightness", (deviceInfo.state.brightness * 100) as Integer)
   }
   if (deviceInfo.batteryLevel) {
-    checkChanged("battery", deviceInfo.batteryLevel)
+    checkChanged("battery", deviceInfo.batteryLevel, "%")
   }
   if (deviceInfo.lastUpdate) {
     state.lastUpdate = deviceInfo.lastUpdate
@@ -194,9 +195,13 @@ def setValues(deviceInfo) {
 }
 
 def checkChanged(attribute, newStatus) {
+  checkChanged(attribute, newStatus, null)
+}
+
+def checkChanged(attribute, newStatus, unit) {
   if (device.currentValue(attribute) != newStatus) {
     logInfo "${attribute.capitalize()} for device ${device.label} is ${newStatus}"
-    sendEvent(name: attribute, value: newStatus)
+    sendEvent(name: attribute, value: newStatus, unit: unit)
   }
 }
 
