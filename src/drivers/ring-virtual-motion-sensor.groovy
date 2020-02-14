@@ -16,6 +16,7 @@
  *  Change Log:
  *  2019-04-26: Initial
  *  2019-11-15: Import URL
+ *  2020-02-12: Fixed battery % to show correctly in dashboards
  *
  */
 
@@ -64,7 +65,7 @@ def setValues(deviceInfo) {
     checkChanged("motion", motion)
   }
   if (deviceInfo.batteryLevel) {
-    checkChanged("battery", deviceInfo.batteryLevel)
+    checkChanged("battery", deviceInfo.batteryLevel, "%")
   }
   if (deviceInfo.tamperStatus) {
     def tamper = deviceInfo.tamperStatus == "tamper" ? "detected" : "clear"
@@ -95,8 +96,12 @@ def setValues(deviceInfo) {
 }
 
 def checkChanged(attribute, newStatus) {
+  checkChanged(attribute, newStatus, null)
+}
+
+def checkChanged(attribute, newStatus, unit) {
   if (device.currentValue(attribute) != newStatus) {
     logInfo "${attribute.capitalize()} for device ${device.label} is ${newStatus}"
-    sendEvent(name: attribute, value: newStatus)
+    sendEvent(name: attribute, value: newStatus, unit: unit)
   }
 }

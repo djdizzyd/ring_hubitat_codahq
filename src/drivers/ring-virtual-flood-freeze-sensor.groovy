@@ -1,7 +1,7 @@
 /**
- *  Ring Virtual Beams Group Driver
+ *  Ring Virtual Alarm Flood & Freeze Sensor Driver
  *
- *  Copyright 2019 Ben Rimmasch
+ *  Copyright 2020 Ben Rimmasch
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -14,24 +14,22 @@
  *
  *
  *  Change Log:
- *  2019-04-26: Initial
- *  2019-11-15: Import URL
- *  2020-02-12: Fixed odd behavior for when a group is added that has a member that isn't created
+ *  2020-02-11: Initial
  *
  */
 
 import groovy.json.JsonSlurper
-import groovy.json.JsonOutput
 
 metadata {
-  definition(name: "Ring Virtual Beams Group", namespace: "codahq-hubitat", author: "Ben Rimmasch",
-    importUrl: "https://raw.githubusercontent.com/codahq/ring_hubitat_codahq/master/src/drivers/ring-virtual-beams-group.groovy") {
+  definition(name: "Ring Virtual Alarm Flood & Freeze Sensor", namespace: "codahq-hubitat", author: "Ben Rimmasch",
+    importUrl: "https://raw.githubusercontent.com/codahq/ring_hubitat_codahq/master/src/drivers/ring-virtual-flood-freeze-sensor.groovy") {
     capability "Refresh"
     capability "Sensor"
-    capability "Motion Sensor"
+    capability "WaterSensor"
     capability "Battery"
     capability "TamperAlert"
-    capability "Switch"
+
+    attribute "freeze", "string"
   }
 
   preferences {
@@ -58,29 +56,26 @@ def refresh() {
   //parent.simpleRequest("refresh-device", [dni: device.deviceNetworkId])
 }
 
-def on() {
-  logDebug "Attempting to turn the light on."
-  def data = ["lightMode": "on", "duration": 60]
-  parent.simpleRequest("setcommand", [type: "light-mode.set", zid: device.getDataValue("zid"), dst: device.getDataValue("src"), data: data])
-}
-
-def off() {
-  logDebug "Attempting to turn the light off."
-  def data = ["lightMode": "default"]
-  parent.simpleRequest("setcommand", [type: "light-mode.set", zid: device.getDataValue("zid"), dst: device.getDataValue("src"), data: data])
-}
-
 def setValues(deviceInfo) {
   logDebug "updateDevice(deviceInfo)"
-  logTrace "deviceInfo: ${JsonOutput.prettyPrint(JsonOutput.toJson(deviceInfo))}"
+  logTrace "deviceInfo: ${deviceInfo}"
 
-  if (deviceInfo.state && deviceInfo.state.motionStatus != null) {
-    def motion = deviceInfo.state.motionStatus == "clear" ? "inactive" : "active"
-    checkChanged("motion", motion)
+  if (deviceInfo.state && deviceInfo.state.faulted != null) {
+    if (deviceInfo.state.flood?.faulted != null) {
+      def water = deviceInfo.state.flood.faulted ? "wet" : "dry"
+      checkChanged("water", water)
+    }
+    if (deviceInfo.state.freeze?.faulted != null) {
+      def freeze = deviceInfo.state.freeze.faulted ? "detected" : "clear"
+      checkChanged("freeze", freeze)
+    }
   }
-  if (deviceInfo.state && deviceInfo.state.on != null) {
-    def switchState = deviceInfo.state.on ? "on" : "off"
-    checkChanged("switch", switchState)
+  if (deviceInfo.batteryLevel) {
+    checkChanged("battery", deviceInfo.batteryLevel, "%")
+  }
+  if (deviceInfo.tamperStatus) {
+    def tamper = deviceInfo.tamperStatus == "tamper" ? "detected" : "clear"
+    checkChanged("tamper", tamper)
   }
   if (deviceInfo.lastUpdate) {
     state.lastUpdate = deviceInfo.lastUpdate
@@ -91,22 +86,28 @@ def setValues(deviceInfo) {
   if (deviceInfo.lastCommTime) {
     state.signalStrength = deviceInfo.lastCommTime
   }
-  if (deviceInfo.state?.groupMembers) {
-    state.members = deviceInfo.state?.groupMembers.collectEntries {
-      def d = parent.getChildByZID(it)
-      if (d) {
-        [(d.deviceNetworkId): d.label]
-      }
-      else {
-        log.warn "Device ${it} isn't created in Hubitat and will not be included in this group's members."
-      }
-    }
+  if (deviceInfo.nextExpectedWakeup) {
+    state.nextExpectedWakeup = deviceInfo.nextExpectedWakeup
   }
+  if (deviceInfo.signalStrength) {
+    state.signalStrength = deviceInfo.signalStrength
+  }
+  if (deviceInfo.firmware && device.getDataValue("firmware") != deviceInfo.firmware) {
+    device.updateDataValue("firmware", deviceInfo.firmware)
+  }
+  if (deviceInfo.hardwareVersion && device.getDataValue("hardwareVersion") != deviceInfo.hardwareVersion) {
+    device.updateDataValue("hardwareVersion", deviceInfo.hardwareVersion)
+  }
+
 }
 
 def checkChanged(attribute, newStatus) {
+  checkChanged(attribute, newStatus, null)
+}
+
+def checkChanged(attribute, newStatus, unit) {
   if (device.currentValue(attribute) != newStatus) {
     logInfo "${attribute.capitalize()} for device ${device.label} is ${newStatus}"
-    sendEvent(name: attribute, value: newStatus)
+    sendEvent(name: attribute, value: newStatus, unit: unit)
   }
 }

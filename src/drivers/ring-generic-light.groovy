@@ -18,7 +18,8 @@
  *  2019-11-15: Import URL
  *  2019-12-20: Fixed flash
  *              Fixed polling for light status
- *	2019-12-23: Added battery support
+ *  2019-12-23: Added battery support
+ *  2020-02-11: Added second battery support
  *
  */
 
@@ -33,10 +34,12 @@ metadata {
     capability "Refresh"
     capability "Polling"
     capability "MotionSensor"
-	capability "Battery"
+    capability "Battery"
 
     command "flash"
     command "getDings"
+
+    attribute "battery2", "number"
   }
 
   // simulator metadata
@@ -57,6 +60,9 @@ metadata {
     input name: "lightInterval", type: "number", range: 10..600, title: "Number of seconds in between light polls", defaultValue: 15
     input name: "strobeTimeout", type: "enum", title: "Flash Timeout", options: [[30: "30s"], [60: "1m"], [120: "2m"], [180: "3m"]], defaultValue: 30
     input name: "strobeRate", type: "enum", title: "Flash rate", options: [[1000: "1s"], [2000: "2s"], [5000: "5s"]], defaultValue: 1000
+    input name: "discardBatteryLevel", type: "bool", title: "<b>Discard the battery level because this device is plugged in or doesn't support " +
+      "battery level</b>", description: "This setting can prevent a battery level attribute from showing up but it cannot remove one once battery " +
+      "has been set.  Nothing can.", defaultValue: true
     input name: "descriptionTextEnable", type: "bool", title: "Enable descriptionText logging", defaultValue: false
     input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: false
     input name: "traceLogEnable", type: "bool", title: "Enable trace logging", defaultValue: false
@@ -183,17 +189,20 @@ def childParse(type, params) {
 
 private handleRefresh(json) {
   logTrace "handleRefresh(${json.description})"
-  
-  if (json.battery_life != null) {
-    checkChanged("battery", json.battery_life)
+
+  if (json.battery_life != null && !discardBatteryLevel) {
+    checkChanged("battery", json.battery_life, "%")
+    if (json.battery_life_2 != null) {
+      checkChanged("battery2", json.battery_life_2, "%")
+    }
   }
-  
+
   if (!json.led_status) {
     log.warn "No status?"
     return
   }
 
-  if (json.led_status.seconds_remaining != null) {
+  if (json.led_status && !(json.led_status instanceof java.lang.String) && json.led_status.seconds_remaining != null) {
     checkChanged("switch", json.led_status.seconds_remaining > 0 ? "on" : "off")
   }
   else if (json.led_status) {
@@ -244,8 +253,12 @@ def motionOff(data) {
 }
 
 def checkChanged(attribute, newStatus) {
+  checkChanged(attribute, newStatus, null)
+}
+
+def checkChanged(attribute, newStatus, unit) {
   if (device.currentValue(attribute) != newStatus) {
     logInfo "${attribute.capitalize()} for device ${device.label} is ${newStatus}"
-    sendEvent(name: attribute, value: newStatus)
+    sendEvent(name: attribute, value: newStatus, unit: unit)
   }
 }
