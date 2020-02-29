@@ -65,7 +65,7 @@ def setValues(deviceInfo) {
     def motion = deviceInfo.state.motionStatus == "clear" ? "inactive" : "active"
     checkChanged("motion", motion)
   }
-  if (deviceInfo.batteryLevel) {
+  if (deviceInfo.batteryLevel != null) {
     checkChanged("battery", deviceInfo.batteryLevel, "%")
   }
   if (deviceInfo.tamperStatus) {

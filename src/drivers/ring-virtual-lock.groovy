@@ -73,7 +73,7 @@ def setValues(deviceInfo) {
   if (deviceInfo.state && deviceInfo.state.locked != null) {
     checkChanged("lock", deviceInfo.state.locked)
   }
-  if (deviceInfo.batteryLevel) {
+  if (deviceInfo.batteryLevel != null) {
     checkChanged("battery", deviceInfo.batteryLevel, "%")
   }
   if (deviceInfo.lastUpdate) {

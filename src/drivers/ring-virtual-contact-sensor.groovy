@@ -64,7 +64,7 @@ def setValues(deviceInfo) {
     def contact = deviceInfo.state.faulted ? "open" : "closed"
     checkChanged("contact", contact)
   }
-  if (deviceInfo.batteryLevel) {
+  if (deviceInfo.batteryLevel != null) {
     checkChanged("battery", deviceInfo.batteryLevel, "%")
   }
   if (deviceInfo.tamperStatus) {

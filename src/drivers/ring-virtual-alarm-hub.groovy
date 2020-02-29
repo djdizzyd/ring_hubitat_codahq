@@ -287,7 +287,7 @@ def setValues(deviceInfo) {
   if (deviceInfo.state?.volume != null) {
     checkChanged("volume", (deviceInfo.state.volume * 100) as Integer)
   }
-  if (deviceInfo.batteryLevel) {
+  if (deviceInfo.batteryLevel != null) {
     checkChanged("battery", deviceInfo.batteryLevel)
   }
   if (deviceInfo.state?.brightness != null) {

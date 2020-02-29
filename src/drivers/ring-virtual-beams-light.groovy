@@ -106,7 +106,7 @@ def setValues(deviceInfo) {
     def brightness = (deviceInfo.state.level.toDouble() * 100).toInteger()
     checkChanged("brightness", brightness)
   }
-  if (deviceInfo.batteryLevel && !discardBatteryLevel && !NO_BATTERY_DEVICES.contains(device.getDataValue("fingerprint"))) {
+  if (deviceInfo.batteryLevel != null && !discardBatteryLevel && !NO_BATTERY_DEVICES.contains(device.getDataValue("fingerprint"))) {
     checkChanged("battery", deviceInfo.batteryLevel, "%")
   }
   if (deviceInfo.tamperStatus) {

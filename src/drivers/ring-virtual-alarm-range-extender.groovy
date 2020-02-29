@@ -66,7 +66,7 @@ def setValues(deviceInfo) {
   }
   //"batteryStatus": "full",
   //impulseType == battery.changed-out-of-band
-  if (deviceInfo.batteryLevel) {
+  if (deviceInfo.batteryLevel != null) {
     checkChanged("battery", deviceInfo.batteryLevel, "%")
   }
   if (deviceInfo.batteryStatus != null /*&& deviceInfo.impulses?."battery.changed-out-of-band" != null*/) {

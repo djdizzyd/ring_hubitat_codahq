@@ -71,7 +71,7 @@ def setValues(deviceInfo) {
   if (deviceInfo.state?.on != null) {
     checkChanged("switch", deviceInfo.state.on ? "on" : "off")
   }
-  if (deviceInfo.batteryLevel) {
+  if (deviceInfo.batteryLevel != null) {
     checkChanged("battery", deviceInfo.batteryLevel)
   }
   if (deviceInfo.tamperStatus) {

@@ -167,7 +167,7 @@ def setValues(deviceInfo) {
   if (deviceInfo.state && deviceInfo.state.brightness != null) {
     checkChanged("brightness", (deviceInfo.state.brightness * 100) as Integer)
   }
-  if (deviceInfo.batteryLevel) {
+  if (deviceInfo.batteryLevel != null) {
     checkChanged("battery", deviceInfo.batteryLevel, "%")
   }
   if (deviceInfo.lastUpdate) {
