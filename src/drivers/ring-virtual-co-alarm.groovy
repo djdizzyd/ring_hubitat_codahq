@@ -66,7 +66,7 @@ def setValues(deviceInfo) {
     if (deviceInfo.state.co.enabledTimeMs)
       state.coEnabled = deviceInfo.state.co.enabledTimeMs
   }
-  if (deviceInfo.batteryLevel) {
+  if (deviceInfo.batteryLevel != null) {
     checkChanged("battery", deviceInfo.batteryLevel, "%")
   }
   if (deviceInfo.tamperStatus) {

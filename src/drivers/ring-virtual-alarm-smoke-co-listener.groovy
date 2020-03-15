@@ -87,7 +87,7 @@ def setValues(deviceInfo) {
   if (deviceInfo.state && deviceInfo.state.testMode != null) {
     checkChanged("testMode", deviceInfo.state.testMode)
   }
-  if (deviceInfo.batteryLevel) {
+  if (deviceInfo.batteryLevel != null) {
     checkChanged("battery", deviceInfo.batteryLevel, "%")
   }
   if (deviceInfo.tamperStatus) {

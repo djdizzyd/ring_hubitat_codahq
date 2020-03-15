@@ -75,7 +75,7 @@ def setValues(deviceInfo) {
     if (deviceInfo.state.enabledTimeMs)
       state.smokeEnabled = deviceInfo.state.enabledTimeMs
   }
-  if (deviceInfo.batteryLevel) {
+  if (deviceInfo.batteryLevel != null) {
     checkChanged("battery", deviceInfo.batteryLevel, "%")
   }
   if (deviceInfo.tamperStatus) {
